@@ -26,7 +26,9 @@ from seller_growth.categories import CATEGORIES, ORDER  # noqa: E402
 from seller_growth.revenue import (Settings, break_even_grid, break_even_stake, run_category,  # noqa: E402
                                    settings_hash, top_play_per_seller, units_summary)
 from seller_growth.workings import (GLOSSARY, MONTH_NAMES, play_rules, plain_rule, product_workings,  # noqa: E402
-                                    routing_rule, routing_workings, season_table, seller_workings, steps_markdown)
+                                    routing_rule, routing_workings, season_table, seller_workings, steps_markdown,
+                                    GRID_CALL_LABEL, GRID_GAP_LABEL, GRID_HOW_TO_READ, call_or_message_text,
+                                    play_sentence)
 
 OUT = ROOT / "docs" / "OVERVIEW.md"
 REPO = "https://github.com/AstraErgo07/oncommerce-seller-revenue"
@@ -154,17 +156,25 @@ def seller_revenue_section() -> list[str]:
     return out
 
 
-def break_even_section(a: Settings) -> list[str]:
+def break_even_section(a: Settings, example_play: dict | None = None) -> list[str]:
     be = break_even_stake(a)
     grid = break_even_grid(a).map(lambda v: gbp(v, 2) if v != float("inf") else "never")
-    return ["## Call or message: the break-even", "",
-            "A Seller Success call is worth it when the £ at stake a month is above "
-            "(call cost − message cost) / (12 months × (call success − message success)).", "",
-            f"At the defaults: ({gbp(a.human_cost)} − {gbp(a.auto_cost)}) / ({a.value_horizon_months:g} × "
-            f"({a.p_success_human:.0%} − {a.p_success_auto:.0%})) = {gbp(be, 2)} a month.", "",
-            f"Break-even £ a month for other call costs (rows) and success gaps (columns), message cost "
-            f"{gbp(a.auto_cost)}:", "", md_table(grid.reset_index().rename(columns={"index": "Call cost"})), "",
-            "Each play on a page is shown as one line: \"£X at stake -> route (break-even £Y) -> expected £Z/mo\".", ""]
+    grid = grid.rename(columns=lambda c: f"{c} more often").reset_index()
+    out = ["## Call or message?", "",
+           call_or_message_text(a), "",
+           "### The tipping point (break-even)", "",
+           "A Seller Success call is worth it when the £ at stake a month is above "
+           f"(call cost − message cost) ÷ ({a.value_horizon_months:g} months × (call success − message success)).", "",
+           f"At the defaults: ({gbp(a.human_cost)} − {gbp(a.auto_cost)}) ÷ ({a.value_horizon_months:g} × "
+           f"({a.p_success_human:.0%} − {a.p_success_auto:.0%})) = {gbp(be, 2)} a month.", "",
+           f"Tipping point, £ a month, for other call costs and success gaps (message cost {gbp(a.auto_cost)}). "
+           f"Rows: {GRID_CALL_LABEL.lower()}. Columns: {GRID_GAP_LABEL.lower()}.", "",
+           md_table(grid), "", GRID_HOW_TO_READ, "",
+           "Each play on a page gets one line in plain words, in the form \"£X a month at stake, above the £Y "
+           "tipping point, so call. Expected gain £Z a month.\" (or below it, so send the message)."]
+    if example_play is not None:
+        out += ["", f"For example, the top play on the Heaters page: {play_sentence(example_play, a)}"]
+    return out + [""]
 
 
 RPO = 1.0
@@ -273,7 +283,9 @@ def build() -> str:
           "Play rules:", ""]
     L += [f"- {k}: {v}" for k, v in play_rules(a).items()]
     L += ["", "Routing: " + routing_rule(a), ""]
-    L += break_even_section(a)
+    hp = run_category(pd.read_csv(ROOT / "seller_growth" / "example_products.csv"),
+                      CATEGORIES["heaters"].subcategories, a)[2]
+    L += break_even_section(a, hp.iloc[0].to_dict() if len(hp) else None)
     L += seller_revenue_section()
     L += ["## Limits", "",
           "- The OnBuy data is synthetic. It copies the shape of a small sample found through search, which favours "

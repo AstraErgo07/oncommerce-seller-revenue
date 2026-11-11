@@ -20,6 +20,8 @@ if str(ROOT) not in sys.path:
 from common.text import VERSION  # noqa: E402
 from seller_growth.categories import CategoryConfig  # noqa: E402
 from seller_growth.data_schema import load_csv  # noqa: E402
+from seller_growth.workings import (GRID_CALL_LABEL, GRID_GAP_LABEL, GRID_HOW_TO_READ,  # noqa: E402
+                                    call_or_message_text, play_sentence)
 from seller_growth.revenue import (Settings, break_even_grid, break_even_stake,  # noqa: E402
                                    calibrate_reviews_per_order, settings_hash)
 
@@ -192,24 +194,28 @@ def settings_sidebar(cfg: CategoryConfig, df_all: pd.DataFrame) -> Settings:
 # --- break-even ----------------------------------------------------------------------------------------------------
 def break_even_panel(a: Settings) -> None:
     be = break_even_stake(a)
-    gap = a.p_success_human - a.p_success_auto
+    st.markdown("#### Call or message?")
+    st.markdown(call_or_message_text(a))
     with st.container(border=True):
-        st.markdown("#### Call or message? The break-even")
+        st.markdown("##### The tipping point (break-even)")
         st.markdown(
             f"A Seller Success call is worth it when the £ at stake a month is above "
-            f"(call cost − message cost) / ({a.value_horizon_months:g} months × (call success − message success)) = "
-            f"(£{a.human_cost:,.0f} − £{a.auto_cost:,.0f}) / ({a.value_horizon_months:g} × "
+            f"(call cost − message cost) ÷ ({a.value_horizon_months:g} months × (call success − message success)) = "
+            f"(£{a.human_cost:,.0f} − £{a.auto_cost:,.0f}) ÷ ({a.value_horizon_months:g} × "
             f"({a.p_success_human:.0%} − {a.p_success_auto:.0%})) = "
             + (f"**£{be:,.2f} a month**." if be != float("inf") else "never (calls are not more successful)."))
-        st.caption("Below it, an automated message is the better use of money. Break-even £ a month for other call "
-                   f"costs and success gaps (message cost £{a.auto_cost:,.0f}; current gap {gap * 100:.0f} pts):")
-        grid = break_even_grid(a)
-        st.dataframe(grid.map(lambda v: f"£{v:,.0f}" if v != float("inf") else "never"), width="content")
+        st.markdown(f"Tipping point, £ a month, for other call costs and success gaps (message cost "
+                    f"£{a.auto_cost:,.0f}). Rows: {GRID_CALL_LABEL.lower()}. Columns: {GRID_GAP_LABEL.lower()}.")
+        grid = break_even_grid(a).map(lambda v: f"£{v:,.0f}" if v != float("inf") else "never")
+        grid = grid.reset_index().rename(columns={"index": GRID_CALL_LABEL})
+        st.dataframe(grid, hide_index=True, width="content",
+                     column_config={c: st.column_config.TextColumn(c, help=GRID_GAP_LABEL)
+                                    for c in grid.columns[1:]})
+        st.caption(GRID_HOW_TO_READ)
 
 
 def play_line(play: dict, a: Settings) -> str:
-    return (f"£{play['stake_month']:,.0f} at stake -> {play['route']} (break-even £{break_even_stake(a):,.0f}) -> "
-            f"expected £{play['expected_month']:,.0f}/mo")
+    return play_sentence(play, a)
 
 
 # --- decision log --------------------------------------------------------------------------------------------------

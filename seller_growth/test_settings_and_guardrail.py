@@ -47,6 +47,24 @@ class TestBreakEven(unittest.TestCase):
         self.assertAlmostEqual(g.iloc[2, 2], (240 - 2) / (12 * 0.30))
 
 
+class TestPlainWords(unittest.TestCase):
+    def test_explanation_and_play_line(self):
+        from workings import call_or_message_text, play_sentence
+        from revenue import AUTOMATED
+        a = Settings()
+        t = call_or_message_text(a)
+        self.assertIn("A call costs about £120 of staff time and works about 35% of the time.", t)
+        self.assertIn("A call works 20 percentage points more often but costs £118 more", t)
+        self.assertIn("£118 ÷ (12 × 20%) ≈ £49 a month. Above it: call. Below it: send the message.", t)
+        self.assertEqual(play_sentence({"stake_month": 200, "route": HUMAN, "expected_month": 70}, a),
+                         "£200 a month at stake, above the £49 tipping point, so call. Expected gain £70 a month.")
+        self.assertEqual(play_sentence({"stake_month": 20, "route": AUTOMATED, "expected_month": 3}, a),
+                         "£20 a month at stake, below the £49 tipping point, so send the message. "
+                         "Expected gain £3 a month.")
+        for play in run_all(DATA, a)[2].to_dict("records"):   # wording always agrees with the rules' route
+            self.assertEqual("so call." in play_sentence(play, a), play["route"] == HUMAN)
+
+
 class TestSettings(unittest.TestCase):
     def test_hash_is_deterministic_and_sensitive(self):
         self.assertEqual(settings_hash(Settings()), settings_hash(Settings()))

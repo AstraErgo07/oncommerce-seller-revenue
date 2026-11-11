@@ -39,7 +39,10 @@ try:
             continue
         assert any(BANNER in w.value for w in at.warning), page
         assert any(b.label == "Download decision log" for b in at.get("download_button")), page
-        assert any("Call or message? The break-even" in m.value for m in at.markdown), page
+        assert any(m.value.startswith("Should someone phone this seller") and "≈ £49 a month" in m.value
+                   for m in at.markdown), page
+        assert any("Cost of one call" in list(d.value.columns) for d in at.dataframe), page
+        assert any(c.value.startswith("How to read the grid") for c in at.caption), page
         assert any("£49.17 a month" in m.value for m in at.markdown), page
         if page in SR_PAGES:
             assert any(c.value.startswith("Seller Revenue v1.0") for c in at.caption), page
@@ -64,7 +67,8 @@ try:
             plays = [d.value for d in at.dataframe if "Decision line" in d.value.columns]
             if plays:
                 line = plays[0]["Decision line"].iloc[0]
-                assert " at stake -> " in line and "(break-even £49)" in line and "/mo" in line, line
+                assert " a month at stake, " in line and "£49 tipping point, so " in line \
+                    and "Expected gain £" in line and "->" not in line, line
 
     # Interaction on the heaters page
     at = AppTest.from_file("app_pages/seller_revenue_heaters.py", default_timeout=90).run()
@@ -80,6 +84,8 @@ try:
     # change settings, then reset
     at.slider(key="heaters_hc").set_value(240.0).run()
     assert any("£99.17 a month" in m.value for m in at.markdown), "break-even did not follow the call cost"
+    assert any("A call costs about £240 of staff time" in m.value and "≈ £99 a month" in m.value
+               for m in at.markdown), "explanation did not follow the slider"
     at.slider(key="heaters_churn").set_value(0.06).run()
     at.selectbox(key="heaters_prof").set_value("all-year").run()
     at.slider(key="heaters_n_buyers").set_value(100).run()

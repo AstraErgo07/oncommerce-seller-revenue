@@ -95,21 +95,29 @@ Play rules:
 
 Routing: Each play has a monthly £ at stake. A Seller Success call is assumed to work 35% of the time and cost £120; an automated message works 15% of the time and costs £2. Over 12 months, pick whichever leaves more money after its cost. With these settings a call is worth it when about £49 a month or more is at stake. Expected £ a month = £ at stake x the success rate of the chosen route.
 
-## Call or message: the break-even
+## Call or message?
 
-A Seller Success call is worth it when the £ at stake a month is above (call cost − message cost) / (12 months × (call success − message success)).
+Should someone phone this seller, or is an automated message enough? A call costs about £120 of staff time and works about 35% of the time. A message costs about £2 and works about 15% of the time. A call works 20 percentage points more often but costs £118 more, so it only pays when enough money is at stake. Over 12 months that tipping point is £118 ÷ (12 × 20%) ≈ £49 a month. Above it: call. Below it: send the message.
 
-At the defaults: (£120 − £2) / (12 × (35% − 15%)) = £49.17 a month.
+### The tipping point (break-even)
 
-Break-even £ a month for other call costs (rows) and success gaps (columns), message cost £2:
+A Seller Success call is worth it when the £ at stake a month is above (call cost − message cost) ÷ (12 months × (call success − message success)).
 
-| Call cost | 10 pts | 20 pts | 30 pts |
+At the defaults: (£120 − £2) ÷ (12 × (35% − 15%)) = £49.17 a month.
+
+Tipping point, £ a month, for other call costs and success gaps (message cost £2). Rows: cost of one call. Columns: how much more often a call works than a message, in percentage points.
+
+| Cost of one call | 10 points more often | 20 points more often | 30 points more often |
 |---|---|---|---|
-| Call £60 | £48.33 | £24.17 | £16.11 |
-| Call £120 | £98.33 | £49.17 | £32.78 |
-| Call £240 | £198.33 | £99.17 | £66.11 |
+| £60 | £48.33 | £24.17 | £16.11 |
+| £120 | £98.33 | £49.17 | £32.78 |
+| £240 | £198.33 | £99.17 | £66.11 |
 
-Each play on a page is shown as one line: "£X at stake -> route (break-even £Y) -> expected £Z/mo".
+How to read the grid: pick the row for what a call costs and the column for how much more often a call works; the cell is the £ a month at stake above which a call pays.
+
+Each play on a page gets one line in plain words, in the form "£X a month at stake, above the £Y tipping point, so call. Expected gain £Z a month." (or below it, so send the message).
+
+For example, the top play on the Heaters page: £514 a month at stake, above the £49 tipping point, so call. Expected gain £180 a month.
 
 ## Seller Revenue: headline numbers on the example data
 

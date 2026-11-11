@@ -173,8 +173,11 @@ def break_even_stake(a: Settings, call_cost: float | None = None, success_gap: f
 
 def break_even_grid(a: Settings, call_costs=(60.0, 120.0, 240.0), gaps=(0.10, 0.20, 0.30)) -> pd.DataFrame:
     """Break-even £/month for each call cost (rows) and success gap in points (columns); message cost from a."""
-    return pd.DataFrame({f"{g * 100:.0f} pts": [break_even_stake(a, c, g) for c in call_costs] for g in gaps},
-                        index=[f"Call £{c:.0f}" for c in call_costs])
+    df = pd.DataFrame({f"{g * 100:.0f} points": [break_even_stake(a, c, g) for c in call_costs] for g in gaps},
+                      index=[f"£{c:.0f}" for c in call_costs])
+    df.index.name = "Cost of one call"
+    df.columns.name = "How much more often a call works than a message, in percentage points"
+    return df
 
 
 # ---------------------------------------------------------------------------

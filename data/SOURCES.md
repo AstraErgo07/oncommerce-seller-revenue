@@ -134,7 +134,9 @@ A call is worth it when the £ at stake a month is above the break-even:
 (call cost − message cost) / (12 months × (call success − message success)). At the defaults that is
 (£120 − £2) / (12 × (35% − 15%)) = £49.17 a month. Each page shows a grid of the break-even for call costs of £60,
 £120 and £240 and success gaps of 10, 20 and 30 points, and one line per play:
-"£X at stake -> route (break-even £Y) -> expected £Z/mo".
+"£X a month at stake, above the £Y tipping point, so call. Expected gain £Z a month." (or below it, so send the
+message). A "percentage point" is the plain difference between two percentages: a call that works 35% of the time
+works 20 percentage points more often than a message that works 15% of the time.
 
 The decision log has the columns timestamp, page, seller, product, play, at_stake, route, expected_mo, decision,
 reason and settings_hash. settings_hash is the first 12 characters of a SHA-256 of the Settings, so two decisions

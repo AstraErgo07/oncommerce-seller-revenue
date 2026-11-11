@@ -16,15 +16,50 @@ import math
 try:
     from .calc import months_since
     from .revenue import (BOOST, FIRST_SALE, LEAK_DELIVERY, LEAK_DUP, LEAK_OOS, LEAK_PRICE, RETAIN,
-                          UPGRADE, Settings, season_group, subscription_for)
+                          UPGRADE, Settings, break_even_stake, season_group, subscription_for)
 except ImportError:
     from calc import months_since
     from revenue import (BOOST, FIRST_SALE, LEAK_DELIVERY, LEAK_DUP, LEAK_OOS, LEAK_PRICE, RETAIN,
-                         UPGRADE, Settings, season_group, subscription_for)
+                         UPGRADE, Settings, break_even_stake, season_group, subscription_for)
 
 REAL, EXAMPLE, ASSUMED, WORKED = "Real (published fee)", "Example input", "Assumed (slider)", "Worked out"
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
                "November", "December"]
+
+GRID_CALL_LABEL = "Cost of one call"
+GRID_GAP_LABEL = "How much more often a call works than a message, in percentage points"
+GRID_HOW_TO_READ = ("How to read the grid: pick the row for what a call costs and the column for how much more often "
+                    "a call works; the cell is the £ a month at stake above which a call pays.")
+
+
+def call_or_message_text(a: Settings) -> str:
+    """Plain-English explanation of the call or message tipping point, with the current settings."""
+    gap = a.p_success_human - a.p_success_auto
+    extra = a.human_cost - a.auto_cost
+    head = (f"Should someone phone this seller, or is an automated message enough? A call costs about "
+            f"£{a.human_cost:,.0f} of staff time and works about {a.p_success_human:.0%} of the time. A message costs "
+            f"about £{a.auto_cost:,.0f} and works about {a.p_success_auto:.0%} of the time. ")
+    if gap <= 0:
+        return head + "A call does not work more often than a message, so the message is always the better choice."
+    be = break_even_stake(a)
+    return head + (f"A call works {gap * 100:.0f} percentage points more often but costs £{extra:,.0f} more, so it "
+                   f"only pays when enough money is at stake. Over {a.value_horizon_months:g} months that tipping "
+                   f"point is £{extra:,.0f} ÷ ({a.value_horizon_months:g} × {gap:.0%}) ≈ £{be:,.0f} a month. "
+                   "Above it: call. Below it: send the message.")
+
+
+def play_sentence(play: dict, a: Settings) -> str:
+    """One line per play: '£X a month at stake, above the £Y tipping point, so call. Expected gain £Z a month.'"""
+    be = break_even_stake(a)
+    stake = f"£{play['stake_month']:,.0f} a month at stake, "
+    if be == float("inf"):
+        where = "and a call never pays here, so send the message."
+    elif play["route"].startswith("Human"):
+        where = f"above the £{be:,.0f} tipping point, so call."
+    else:
+        where = f"below the £{be:,.0f} tipping point, so send the message."
+    return stake + where + f" Expected gain £{play['expected_month']:,.0f} a month."
+
 
 GLOSSARY = {
     "Est. units/month": "how many items we think the listing sells in the current month.",

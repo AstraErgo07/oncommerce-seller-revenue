@@ -35,8 +35,9 @@ from the code by `python tools/build_overview.py`.
   commission + Boost fees, using OnCommerce's published prices.
 - Call or message: a call is worth it when the £ at stake a month is above
   (call cost − message cost) / (12 × (call success − message success)). At the defaults that is
-  (£120 − £2) / (12 × 0.20) = £49.17 a month. Each page shows this break-even, a grid for other costs and success
-  gaps, and one line per play: "£X at stake -> route (break-even £Y) -> expected £Z/mo".
+  (£120 − £2) / (12 × 0.20) = £49.17 a month. Each page explains this tipping point in plain words, shows a grid
+  for other call costs and success gaps, and gives one line per play, for example "£X a month at stake, above the
+  £Y tipping point, so call. Expected gain £Z a month."
 - Decision log: timestamp, page, seller, product, play, at_stake, route, expected_mo, decision, reason and
   settings_hash (a short hash of the Settings in use). Download it with "Download decision log".
 - LLM: optional (`OPENAI_API_KEY`). It only drafts the message text, from facts that leave out the route, the
