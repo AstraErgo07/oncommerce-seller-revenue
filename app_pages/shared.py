@@ -21,11 +21,18 @@ from common.text import VERSION  # noqa: E402
 from seller_growth.categories import CategoryConfig  # noqa: E402
 from seller_growth.data_schema import load_csv  # noqa: E402
 from seller_growth.workings import (GRID_CALL_LABEL, GRID_GAP_LABEL, GRID_HOW_TO_READ,  # noqa: E402
-                                    call_or_message_text, play_sentence)
+                                    call_or_message_text, play_sentence, reviews_per_order_text)
 from seller_growth.revenue import (Settings, break_even_grid, break_even_stake,  # noqa: E402
                                    calibrate_reviews_per_order, settings_hash)
 
 EXAMPLE_CSV = ROOT / "seller_growth" / "example_products.csv"
+CALIBRATION = ROOT / "seller_growth" / "calibration_stats.json"
+
+
+def sample_ratio_stats() -> dict:
+    """Aggregates only: n, median, min and max seller reviews per order in the real calibration sample."""
+    import json
+    return json.loads(CALIBRATION.read_text()).get("reviews_per_order_pooled", {})
 EXAMPLE_BANNER = "Example data: method demo, not market estimates."
 EXAMPLE_NOTE = ("Example data, calibrated on a small sample of public OnBuy pages (Nov 2026). Replace with internal "
                 "data to use (sidebar > Data).")
@@ -141,9 +148,9 @@ def settings_sidebar(cfg: CategoryConfig, df_all: pd.DataFrame) -> Settings:
 
     with sb.expander("Seller accounts " + ASSUMED):
         ratio, n_cal = calibrate_reviews_per_order(df_all)
-        opr = st.number_input(f"{ASSUMED} Orders per seller review", 1.0, 200.0, 1 / ratio, 0.5, format="%.1f",
-                              key=s("opr"), help=f"Default: median of the {n_cal} sellers in the data that show both "
-                                                 "an order count and a review count.")
+        opr = st.number_input(f"{ASSUMED} Orders per seller review (1 review per N orders): N", 1.0, 200.0,
+                              1 / ratio, 0.5, format="%.1f", key=s("opr"),
+                              help=reviews_per_order_text(ratio, n_cal, sample_ratio_stats()))
         ten = st.slider(f"{ASSUMED} Months over which lifetime orders built up", 12.0, 96.0, d.seller_tenure_months,
                         6.0, key=s("ten"))
         aov = st.slider(f"{ASSUMED} Average order value (£)", 10.0, 150.0, d.avg_order_value, 5.0, key=s("aov"))

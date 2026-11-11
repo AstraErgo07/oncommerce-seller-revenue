@@ -65,6 +65,47 @@ class TestPlainWords(unittest.TestCase):
             self.assertEqual("so call." in play_sentence(play, a), play["route"] == HUMAN)
 
 
+class TestSellerValueWorkings(unittest.TestCase):
+    """The 'How orders, revenue and LTV are worked out' expander shows the engine's own numbers."""
+
+    def test_matches_engine_on_every_page(self):
+        from revenue import run_category
+        from workings import _gbp, _n, seller_value_workings
+        for k in ORDER:
+            for a in (CATEGORIES[k].assumptions(), CATEGORIES[k].assumptions(monthly_churn=0.05, avg_order_value=50,
+                                                                           seller_reviews_per_order=0.1)):
+                _, s, _ = run_category(DATA, CATEGORIES[k].subcategories, a)
+                for r in s.to_dict("records"):
+                    steps, total, ltv_v = seller_value_workings(r, a, s.attrs["reviews_per_order"],
+                                                                s.attrs["calibration_sellers"])
+                    self.assertAlmostEqual(total, r["est_revenue_month"], places=6)
+                    self.assertAlmostEqual(ltv_v, r["ltv"], places=4)
+                    res = {st["step"].split(" ")[0]: st["result"] for st in steps}
+                    self.assertEqual(res["1."], _n(r["lifetime_orders"]) if r["lifetime_orders"] else "0")
+                    self.assertEqual(res["2."], _n(r["est_orders_month"], 1))
+                    self.assertEqual(res["3."], _gbp(r["est_account_gmv_month"]))
+                    self.assertEqual(res["4a."], _gbp(r["subscription_month"]))
+                    self.assertEqual(res["4b."], _gbp(r["est_commission_month"]))
+                    self.assertEqual(res["4c."], _gbp(r["est_boost_month"]))
+                    self.assertEqual(res["5."], _gbp(r["ltv"]))
+                    for st in steps:
+                        self.assertTrue(st["source"].startswith(("Real", "Assumed", "Worked out")), st)
+
+    def test_plain_labels_and_ratio_text(self):
+        from workings import orders_source_label, reviews_per_order_text, seller_value_workings
+        self.assertEqual(orders_source_label("SHOWN (seller box, lower bound)"), "Shown on OnBuy")
+        self.assertEqual(orders_source_label("EST. seller reviews ÷ 0.066"), "Estimated from reviews")
+        t = reviews_per_order_text(0.066, 13, {"n": 12, "median": 0.07, "min": 0.05, "max": 0.0815})
+        self.assertIn("About 6.6 seller reviews per 100 orders, i.e. 1 review per about 15 orders.", t)
+        self.assertIn("then the median (middle value)", t)
+        self.assertIn("Based on 13 sellers", t)
+        self.assertIn("12 such sellers: median 1 review per 14 orders, ranging from 1 per 12 to 1 per 20", t)
+        a = Settings()
+        s = run_all(DATA, a)[1]
+        steps, _, _ = seller_value_workings(s.iloc[0].to_dict(), a, s.attrs["reviews_per_order"], 13)
+        self.assertIn("At 3% churn a seller stays about 33 months on average (1 ÷ 0.03)", steps[-1]["working"])
+
+
 class TestSettings(unittest.TestCase):
     def test_hash_is_deterministic_and_sensitive(self):
         self.assertEqual(settings_hash(Settings()), settings_hash(Settings()))

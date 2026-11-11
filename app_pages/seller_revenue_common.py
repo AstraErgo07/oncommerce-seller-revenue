@@ -19,12 +19,13 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app_pages.shared import (banner, why_call_vs_message, data_sidebar, decision_log_section, guarded,  # noqa: E402
+from app_pages.shared import (sample_ratio_stats, banner, why_call_vs_message, data_sidebar, decision_log_section, guarded,  # noqa: E402
                                log_decision, play_line, settings_sidebar)
 from seller_growth.agent import draft_outreach, drafted_by  # noqa: E402
 from seller_growth.categories import CATEGORIES, CategoryConfig  # noqa: E402
 from seller_growth.workings import (GLOSSARY, play_rules, plain_rule, product_workings,  # noqa: E402
-                                    routing_rule, routing_workings, seller_workings)
+                                    orders_source_label, reviews_per_order_text, routing_rule, routing_workings,
+                                    seller_value_workings, seller_workings)
 from seller_growth.revenue import (AUTOMATED, HUMAN, PLAY_TYPES, Settings, break_even_stake,  # noqa: E402
                                    forecast, leakage_summary, revenue_mix, run_category, top_play_per_seller,
                                    units_summary)
@@ -131,6 +132,28 @@ def get_draft(play: dict, a: Settings, k: str) -> dict:
     return cache[key]
 
 
+def seller_value_expander(k: str, a: Settings, sellers: pd.DataFrame) -> None:
+    """Collapsed, under the Revenue per seller table: one seller's orders, revenue and LTV, step by step."""
+    with st.expander("How orders, revenue and LTV are worked out", expanded=False):
+        if sellers.empty:
+            st.caption("No sellers on this page.")
+            return
+        names = sellers["seller"].tolist()          # sorted by revenue, so the default is the top seller
+        sid = st.selectbox("Seller", names, index=0, key=f"{k}_value_seller")
+        row = sellers[sellers["seller"] == sid].iloc[0].to_dict()
+        rpo, n_cal = sellers.attrs["reviews_per_order"], sellers.attrs["calibration_sellers"]
+        steps, total, ltv_v = seller_value_workings(row, a, rpo, n_cal)
+        st.table(pd.DataFrame(steps).rename(columns={"step": "Step", "working": "Working", "result": "Result",
+                                                    "source": "Real or assumed"}).set_index("Step"))
+        st.caption(f"Where the order count comes from: {orders_source_label(row['orders_source'])}. 'Shown on OnBuy' "
+                   "is the order count in the OnBuy seller box: real, but a minimum because of the +. 'Estimated "
+                   "from reviews' is the seller's review count × orders per review.")
+        st.caption("Note on the ratio: " + reviews_per_order_text(rpo, n_cal, sample_ratio_stats(),
+                                                                   bool(a.seller_reviews_per_order)))
+        st.caption("Assumed inputs are in the sidebar; real ones are OnBuy's published prices or what the seller's "
+                   "page shows.")
+
+
 def render(key: str) -> None:
     cfg = CATEGORIES[key]
     k = cfg.key
@@ -188,7 +211,7 @@ def render(key: str) -> None:
         f"{G_COL} ({cfg.label})": sellers["climate_gmv_month"].round(0),
         f"{cfg.label} commission £/mo": sellers["climate_commission_month"].round(1),
         "Tier": sellers["tier"], "Tier source": sellers["tier_source"],
-        "Lifetime orders": sellers["lifetime_orders"].round(0), "Orders source": sellers["orders_source"],
+        "Lifetime orders": sellers["lifetime_orders"].round(0), "Where the order count comes from": sellers["orders_source"].map(orders_source_label),
         "Account orders / month": sellers["est_orders_month"].round(0),
         "Account GMV £/mo": sellers["est_account_gmv_month"].round(0),
         "Subscription £/mo": sellers["subscription_month"],
@@ -202,6 +225,7 @@ def render(key: str) -> None:
     st.dataframe(tbl, hide_index=True, width="stretch",
                  column_config={c: st.column_config.NumberColumn(format="%.1f%%") for c in
                                 ["Subscription as % of sales", "Same, after Jan 2028"]})
+    seller_value_expander(k, a, sellers)
     c1, c2 = st.columns([2, 3])
     with c1:
         st.markdown("**Revenue mix (sellers on this page, £/month)**")

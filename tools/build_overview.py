@@ -28,7 +28,8 @@ from seller_growth.revenue import (Settings, break_even_grid, break_even_stake, 
 from seller_growth.workings import (GLOSSARY, MONTH_NAMES, play_rules, plain_rule, product_workings,  # noqa: E402
                                     routing_rule, routing_workings, season_table, seller_workings, steps_markdown,
                                     GRID_CALL_LABEL, GRID_GAP_LABEL, GRID_HOW_TO_READ, call_or_message_text,
-                                    play_sentence)
+                                    play_sentence, reviews_per_order_text, seller_value_workings,
+                                    orders_source_label)
 
 OUT = ROOT / "docs" / "OVERVIEW.md"
 REPO = "https://github.com/AstraErgo07/oncommerce-seller-revenue"
@@ -101,14 +102,27 @@ def seller_revenue_section() -> list[str]:
             f"{top['season_index_now']:.2f} = {units:.1f} this month; x {gbp(top['avg_price'], 2)} average price = "
             f"{gbp(gmv)} GMV.", ""]
     sr = s.iloc[0].to_dict()
-    ssteps, total = seller_workings(sr, a, s.attrs["reviews_per_order"])
-    out += ["## Worked example 2: what a seller is worth to OnCommerce", "",
-            f"Heaters page, highest-revenue example seller: {sr['seller']}. This uses the seller's whole account, "
-            "because subscription and commission are paid on the whole account.", "",
+    rpo, n_cal = s.attrs["reviews_per_order"], s.attrs["calibration_sellers"]
+    sample = json.loads((ROOT / "seller_growth" / "calibration_stats.json").read_text()).get("reviews_per_order_pooled")
+    ssteps, total, _ = seller_value_workings(sr, a, rpo, n_cal)
+    out += ["## Worked example 2: how orders, revenue and LTV are worked out for a seller", "",
+            f"Heaters page, highest-revenue example seller: {sr['seller']} (order count: "
+            f"{orders_source_label(sr['orders_source']).lower()}). This uses the seller's whole account, because "
+            "subscription and commission are paid on the whole account. The same steps are in the expander 'How "
+            "orders, revenue and LTV are worked out' under the Revenue per seller table on each page.", "",
             steps_markdown(ssteps), "",
             f"In this category alone the seller sells about {sr['climate_units_month']:.1f} units a month at an average "
             f"{gbp(sr['climate_avg_price'], 2)} = {gbp(sr['climate_gmv_month'])} GMV (seller GMV / seller units = "
             "average price).", ""]
+    top_shown = str(sr["orders_source"]).startswith("SHOWN")
+    other = s[s["orders_source"].str.startswith("EST" if top_shown else "SHOWN")]
+    if len(other):
+        er = other.iloc[0].to_dict()
+        esteps, _, _ = seller_value_workings(er, a, rpo, n_cal)
+        why = ("whose page shows no order count, so orders are estimated from seller reviews" if top_shown else
+               "whose OnBuy seller box shows an order count, so no estimate is needed")
+        out += [f"Step 1 for {er['seller']}, {why}:", "", steps_markdown(esteps[:1]), "",
+                "Note on the ratio: " + reviews_per_order_text(rpo, n_cal, sample), ""]
     if len(pl):
         play = pl.iloc[0].to_dict()
         out += ["## Worked example 3: should a person call, or send an automated message?", "",
@@ -224,7 +238,8 @@ def build() -> str:
          f"{gbp(a.human_cost)}, message cost {gbp(a.auto_cost)}; value counted over {a.value_horizon_months:g} months.",
          f"- OnCommerce margin {a.contribution_margin:.0%}; seller churn {a.monthly_churn:.0%} a month; upgrades "
          f"{a.monthly_upgrade_rate:.0%} a month.",
-         f"- Seller reviews to orders: about {1 / RPO:.1f} orders per seller review (median of sellers showing both).",
+         f"- Seller reviews to orders: 1 review per about {1 / RPO:.1f} orders ({RPO * 100:.1f} seller reviews per 100 "
+         "orders; median of the sellers showing both numbers, explained in worked example 2).",
          f"- Average order value {gbp(a.avg_order_value)}; tenure {a.seller_tenure_months:g} months; Partner if at "
          f"least {a.partner_orders_k:g}k lifetime orders and no badge.",
          f"- Boost: {a.boost_adoption:.0%} of sellers on this page, level {a.boost_level}, "
@@ -251,7 +266,7 @@ def build() -> str:
           f"10. Commission = units x the larger of {a.commission_rate:.0%} of the delivered price and "
           f"£{a.min_fee:.2f}.", "",
           "What a seller is worth to OnCommerce a month:", "",
-          "1. Lifetime orders: the order count in the seller box, or the seller's review count x about 15 (the median "
+          "1. Lifetime orders: the order count in the OnBuy seller box (real, a minimum because of the +), or the seller's review count x about 15 (1 review per about 15 orders: the median "
           "orders per seller review among sellers that show both).",
           f"2. Orders a month = lifetime orders / {a.seller_tenure_months:g} months.",
           f"3. Sales a month for the whole account = orders a month x £{a.avg_order_value:g} average order.",

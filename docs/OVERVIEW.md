@@ -325,7 +325,7 @@ All assumptions are in one `Settings` object passed to every calculation. Defaul
 - Reviews: 1 in 50 buyers. Sales spread over the months since the first review where every review is listed, otherwise 24 months (at least 6). Halve units if the newest review is older than 12 months.
 - Call success 35%, message success 15%; call cost £120, message cost £2; value counted over 12 months.
 - OnCommerce margin 70%; seller churn 3% a month; upgrades 2% a month.
-- Seller reviews to orders: about 15.1 orders per seller review (median of sellers showing both).
+- Seller reviews to orders: 1 review per about 15.1 orders (6.6 seller reviews per 100 orders; median of the sellers showing both numbers, explained in worked example 2).
 - Average order value £35; tenure 36 months; Partner if at least 10k lifetime orders and no badge.
 - Boost: 25% of sellers on this page, level Plus, 30% of their sales boosted.
 
@@ -352,7 +352,7 @@ Units for one listing, step by step:
 
 What a seller is worth to OnCommerce a month:
 
-1. Lifetime orders: the order count in the seller box, or the seller's review count x about 15 (the median orders per seller review among sellers that show both).
+1. Lifetime orders: the order count in the OnBuy seller box (real, a minimum because of the +), or the seller's review count x about 15 (1 review per about 15 orders: the median orders per seller review among sellers that show both).
 2. Orders a month = lifetime orders / 36 months.
 3. Sales a month for the whole account = orders a month x £35 average order.
 4. Tier: Professional where the badge is shown; otherwise Partner if at least 10k lifetime orders, else Standard. Subscription from the published price list.
@@ -410,21 +410,30 @@ Heaters page, top-selling example listing: Example convector heater 07 (seller E
 
 In one line: 7 reviews, about 1 in 50 buyers reviews, so 350 sold to date; over 7 months that is 46.9 a month; x season factor 2.10 = 98.6 this month; x £33.34 average price = £3,286 GMV.
 
-## Worked example 2: what a seller is worth to OnCommerce
+## Worked example 2: how orders, revenue and LTV are worked out for a seller
 
-Heaters page, highest-revenue example seller: Example Seller A. This uses the seller's whole account, because subscription and commission are paid on the whole account.
+Heaters page, highest-revenue example seller: Example Seller A (order count: estimated from reviews). This uses the seller's whole account, because subscription and commission are paid on the whole account. The same steps are in the expander 'How orders, revenue and LTV are worked out' under the Revenue per seller table on each page.
 
 | Step | Working | Result | Source |
 |---|---|---|---|
-| Lifetime orders | 3,790 seller reviews; about 1 seller review per 15 orders (median of sellers that show both numbers), so 3,790 x 15.1 | 57,291 | Worked out |
-| Orders a month | spread over 36 months of trading: 57,291 / 36 | 1,591.4 | Assumed (slider) |
-| Sales a month, whole account (GMV) | average order £35: 1,591.4 x £35 | £55,699 | Assumed (slider) |
-| Subscription | no badge, and at least 10k lifetime orders, so assume Partner; Partner costs £69 a month (promotional price until January 2028, then £129) | £69 | Real (published fee) |
-| Commission | 15% of sales: 15% x £55,699 | £8,355 | Real (published fee) |
-| Boost fees | 25% chance the seller uses Boost x 30% of their sales boosted x 10% fee ('Plus' level) x £55,699 | £418 | Assumed (slider); the 10% level is a real published fee |
-| Revenue to OnCommerce a month | £69 + £8,355 + £418 | £8,842 | Worked out |
+| 1. Lifetime orders (estimated from reviews) | no order count is shown, so 3,790 seller reviews (real) × about 15.1 orders per review (assumed, explained in the note on the ratio): 3,790 × 15.1 | 57,291 | Real review count × Assumed ratio |
+| 2. Orders a month | lifetime orders ÷ months trading (assumed 36): 57,291 ÷ 36 | 1,591.4 | Assumed |
+| 3. Sales a month, whole account | orders a month × average order value (assumed £35): 1,591.4 × £35 | £55,699 | Assumed |
+| 4a. Subscription | tier estimated: no badge, and at least 10k lifetime orders, so assume Partner. Partner costs £69 a month (published promotional price until January 2028, then £129) | £69 | Real price, Assumed tier |
+| 4b. Commission | 15% of sales (published, at least £0.25 an order): 15% × £55,699 | £8,355 | Real |
+| 4c. Boost fees | share of sellers using Boost (25%, assumed) × share of their sales boosted (30%, assumed) × Boost fee (Plus 10%, published) × £55,699 | £418 | Assumed (fee level Real) |
+| 4. Revenue to OnCommerce a month | subscription + commission + Boost: £69 + £8,355 + £418 | £8,842 | Worked out |
+| 5. Lifetime value (LTV) | revenue a month × OnCommerce margin (70%, assumed) ÷ monthly churn (3%, assumed): £8,842 × 70% ÷ 3%. At 3% churn a seller stays about 33 months on average (1 ÷ 0.03) | £206,305 | Assumed |
 
 In this category alone the seller sells about 45.2 units a month at an average £39.00 = £1,761 GMV (seller GMV / seller units = average price).
+
+Step 1 for Example Seller J, whose OnBuy seller box shows an order count, so no estimate is needed:
+
+| Step | Working | Result | Source |
+|---|---|---|---|
+| 1. Lifetime orders (shown on OnBuy) | the OnBuy seller box shows 20.5k+ orders. The + means at least this many, so this is a minimum | 20,500 | Real |
+
+Note on the ratio: About 6.6 seller reviews per 100 orders, i.e. 1 review per about 15 orders. Worked out from the sellers whose OnBuy page shows both their order count and review count: for each, seller reviews ÷ orders, then the median (middle value) so one odd seller can't skew it. Based on 13 sellers in the data (all five pages together), so treat as rough. For reference, the real sample the example data copies had 12 such sellers: median 1 review per 14 orders, ranging from 1 per 12 to 1 per 20.
 
 ## Worked example 3: should a person call, or send an automated message?
 

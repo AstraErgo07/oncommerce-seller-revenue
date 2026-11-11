@@ -62,7 +62,12 @@ Seller tier is taken as shown only where the listing shows the Professional Sell
 estimated: no badge and at least 10k lifetime orders means Partner, otherwise Standard. The threshold is in the sidebar.
 
 Reviews per lifetime order is the median over the sellers whose listing shows both counts. It is used to estimate
-lifetime orders for sellers who show reviews but no order count. The calibration pools all five categories.
+lifetime orders for sellers who show reviews but no order count. The calibration pools all five categories. In the
+example data it comes to about 6.6 seller reviews per 100 orders, i.e. 1 review per about 15 orders, from 13 example
+sellers. The real sample it copies had 12 such sellers: median 1 review per 14 orders, ranging from 1 per 12 to 1 per
+20 (aggregates only, in `seller_growth/calibration_stats.json`). The median (middle value) is used so one odd seller
+cannot skew it. With so few sellers, treat it as rough. Each page explains it, with one seller's orders, revenue and
+LTV step by step, under "How orders, revenue and LTV are worked out" below the Revenue per seller table.
 
 Observations from the calibration sample (aggregates, shown on each page):
 

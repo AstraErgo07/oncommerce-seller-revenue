@@ -60,6 +60,17 @@ try:
                      "3. Products: est. units, average price and GMV per month", "Method and formulas"]
             assert [heads.index(h) for h in order] == sorted(heads.index(h) for h in order), heads
             assert any(e.label == "How these numbers are worked out" for e in at.expander), page
+            assert any(e.label == "How orders, revenue and LTV are worked out" for e in at.expander), page
+            seller_cols = [cs for cs in cols if "Where the order count comes from" in cs]
+            assert seller_cols and not any("Orders source" in cs for cs in cols), cols
+            vals = [d.value["Where the order count comes from"] for d in at.dataframe
+                    if "Where the order count comes from" in d.value.columns][0]
+            assert set(vals) <= {"Shown on OnBuy", "Estimated from reviews", "Not shown"}, set(vals)
+            key = page.split("seller_revenue_")[1][:-3]
+            assert at.selectbox(key=f"{key}_value_seller").index == 0
+            assert any("5. Lifetime value (LTV)" in str(t.value.index.tolist()) for t in at.table), page
+            assert any(c.value.startswith("Note on the ratio: About") and "1 review per about 15 orders" in c.value
+                       for c in at.caption), page
             assert any("sold to date" in str(t.value.to_dict()) for t in at.table), page
             # every assumption control carries a tag
             labels = [w.label for w in list(at.sidebar.slider) + list(at.sidebar.number_input)

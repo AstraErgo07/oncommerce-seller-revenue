@@ -204,6 +204,101 @@ def seller_workings(sr: dict, a: Settings, reviews_per_order: float) -> tuple[li
     return s, total
 
 
+
+# --- seller orders, revenue and LTV, in plain words ---------------------------------------------------------------
+def _pct(x: float) -> str:
+    return f"{round(x * 100, 2):g}%"
+
+
+def orders_source_label(src) -> str:
+    src = str(src)
+    if src.startswith("SHOWN"):
+        return "Shown on OnBuy"
+    if src.startswith("EST"):
+        return "Estimated from reviews"
+    return "Not shown"
+
+
+def reviews_per_order_text(ratio: float, n: int, sample: dict | None = None, set_by_user: bool = False) -> str:
+    """Plain explanation of the seller reviews to orders ratio (e.g. 0.066 = 1 review per about 15 orders)."""
+    if set_by_user:
+        out = (f"Set in the sidebar to 1 review per {1 / ratio:.1f} orders ({ratio * 100:.1f} seller reviews per 100 "
+               "orders). ")
+    else:
+        out = (f"About {ratio * 100:.1f} seller reviews per 100 orders, i.e. 1 review per about {1 / ratio:.0f} "
+               "orders. Worked out from the sellers whose OnBuy page shows both their order count and review count: "
+               "for each, seller reviews ÷ orders, then the median (middle value) so one odd seller can't skew it. "
+               f"Based on {n} sellers in the data (all five pages together), so treat as rough. ")
+    if sample and sample.get("n"):
+        out += (f"For reference, the real sample the example data copies had {sample['n']} such sellers: median 1 "
+                f"review per {1 / sample['median']:.0f} orders, ranging from 1 per {1 / sample['max']:.0f} to 1 per "
+                f"{1 / sample['min']:.0f}.")
+    return out.strip()
+
+
+def seller_value_workings(sr: dict, a: Settings, reviews_per_order: float, n_cal: int,
+                          sample: dict | None = None) -> tuple[list[dict], float, float]:
+    """Steps (1) orders, (2) orders a month, (3) sales a month, (4) revenue, (5) LTV, for one seller.
+    Returns (steps, revenue a month, LTV); both equal the engine's est_revenue_month and ltv."""
+    R, A, W = "Real", "Assumed", "Worked out"
+    s = []
+    life = sr["lifetime_orders"]
+    src = str(sr["orders_source"])
+    if src.startswith("SHOWN"):
+        s.append(step("1. Lifetime orders (shown on OnBuy)",
+                      f"the OnBuy seller box shows {life / 1000:g}k+ orders. The + means at least this many, so "
+                      "this is a minimum", _n(life), R))
+    elif src.startswith("EST"):
+        per = 1 / reviews_per_order
+        s.append(step("1. Lifetime orders (estimated from reviews)",
+                      f"no order count is shown, so {_n(sr['seller_reviews'])} seller reviews (real) × about "
+                      f"{per:.1f} orders per review (assumed, explained in the note on the ratio): "
+                      f"{_n(sr['seller_reviews'])} × {per:.1f}",
+                      _n(life), f"{R} review count × {A} ratio"))
+    else:
+        s.append(step("1. Lifetime orders", "no order count and no seller reviews shown", "0", R))
+    om = sr["est_orders_month"]
+    s.append(step("2. Orders a month", f"lifetime orders ÷ months trading (assumed {a.seller_tenure_months:g}): "
+                  f"{_n(life)} ÷ {a.seller_tenure_months:g}", _n(om, 1), A))
+    gmv = sr["est_account_gmv_month"]
+    s.append(step("3. Sales a month, whole account", f"orders a month × average order value (assumed "
+                  f"{_gbp(a.avg_order_value)}): {_n(om, 1)} × {_gbp(a.avg_order_value)}", _gbp(gmv), A))
+    tier, sub = sr["tier"], sr["subscription_month"]
+    if str(sr["tier_source"]).startswith("SHOWN"):
+        why, tsrc = "tier shown: the listing has the Professional Seller badge", R
+    elif tier == "Partner":
+        why, tsrc = (f"tier estimated: no badge, and at least {a.partner_orders_k:g}k lifetime orders, so assume "
+                     "Partner", f"{R} price, {A} tier")
+    else:
+        why, tsrc = (f"tier estimated: no badge, and fewer than {a.partner_orders_k:g}k lifetime orders, so assume "
+                     "Standard", f"{R} price, {A} tier")
+    s.append(step("4a. Subscription", f"{why}. {tier} costs {_gbp(sub)} a month (published promotional price until "
+                  f"January 2028, then {_gbp(a.sub_list[tier])})", _gbp(sub), tsrc))
+    comm = sr["est_commission_month"]
+    s.append(step("4b. Commission", f"{a.commission_rate:.0%} of sales (published, at least {_gbp(a.min_fee, 2)} an "
+                  f"order): {a.commission_rate:.0%} × {_gbp(gmv)}", _gbp(comm), R))
+    lvl = a.boost_levels[a.boost_level]
+    boost = sr["est_boost_month"]
+    s.append(step("4c. Boost fees", f"share of sellers using Boost ({a.boost_adoption:.0%}, assumed) × share of their "
+                  f"sales boosted ({a.boosted_share_of_gmv:.0%}, assumed) × Boost fee ({a.boost_level} {lvl:.0%}, "
+                  f"published) × {_gbp(gmv)}", _gbp(boost), f"{A} (fee level {R})"))
+    total = sub + comm + boost
+    s.append(step("4. Revenue to OnCommerce a month", f"subscription + commission + Boost: {_gbp(sub)} + "
+                  f"{_gbp(comm)} + {_gbp(boost)}", _gbp(total), W))
+    if a.monthly_churn > 0:
+        ltv_v = total * a.contribution_margin / a.monthly_churn
+        s.append(step("5. Lifetime value (LTV)", f"revenue a month × OnCommerce margin ({a.contribution_margin:.0%}, "
+                      f"assumed) ÷ monthly churn ({_pct(a.monthly_churn)}, assumed): {_gbp(total)} × "
+                      f"{a.contribution_margin:.0%} ÷ {_pct(a.monthly_churn)}. At {_pct(a.monthly_churn)} churn a seller "
+                      f"stays about {1 / a.monthly_churn:.0f} months on average (1 ÷ {a.monthly_churn:g})",
+                      _gbp(ltv_v), A))
+    else:
+        ltv_v = float("inf")
+        s.append(step("5. Lifetime value (LTV)", "churn is set to 0, so sellers never leave and LTV has no limit",
+                      "no limit", A))
+    return s, total, ltv_v
+
+
 def play_rules(a: Settings) -> dict[str, str]:
     """One plain sentence per play: when it fires, and the £ at stake."""
     return {

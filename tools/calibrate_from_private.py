@@ -98,6 +98,21 @@ def category_stats(p: pd.DataFrame) -> dict:
     }
 
 
+def reviews_per_order_pooled(df: pd.DataFrame) -> dict:
+    """Seller reviews / lifetime orders across all five pages: n, median, min and max (aggregates only)."""
+    parts = []
+    for k in ORDER:
+        b = df[df["subcategory"].isin(CATEGORIES[k].subcategories)].drop_duplicates("seller")
+        b = b.dropna(subset=["seller_orders_k", "seller_review_count"])
+        b = b[(b["seller_orders_k"] > 0) & (b["seller_review_count"] > 0)]
+        parts.append(b["seller_review_count"] / (b["seller_orders_k"] * 1000))
+    r = pd.concat(parts)
+    if r.empty:
+        return {"n": 0}
+    return {"n": int(len(r)), "median": round(float(r.median()), 4), "min": round(float(r.min()), 4),
+            "max": round(float(r.max()), 4)}
+
+
 def main() -> None:
     src = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT
     df = pd.read_csv(src)
@@ -105,6 +120,7 @@ def main() -> None:
            "snapshot": SNAPSHOT.isoformat(), "categories": {}}
     for k in ORDER:
         out["categories"][k] = category_stats(df[df["subcategory"].isin(CATEGORIES[k].subcategories)])
+    out["reviews_per_order_pooled"] = reviews_per_order_pooled(df)
     OUT.write_text(json.dumps(out, indent=1))
     print(f"wrote {OUT.relative_to(ROOT)} ({len(df)} sample rows summarised, no rows written)")
 
