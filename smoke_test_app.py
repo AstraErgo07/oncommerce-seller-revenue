@@ -116,7 +116,7 @@ try:
     # launcher renders the default page, footer and version
     at = AppTest.from_file("streamlit_app.py", default_timeout=90).run()
     ok_footer = any("Not affiliated with OnCommerce or OnBuy" in c.value and "v1.0" in c.value
-                    and "Author details available on request" in c.value for c in at.caption)
+                    and "Made by Ami Sata" in c.value for c in at.caption)
     assert not at.exception and ok_footer and any("Seller Revenue" in t.value for t in at.title)
     print("launcher ok")
 finally:

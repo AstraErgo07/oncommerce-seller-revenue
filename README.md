@@ -10,7 +10,7 @@ category manager accepts or overrides every play, and each decision goes into a 
 The app runs on synthetic example data by default: "Example data: method demo, not market estimates." Internal data
 can be loaded from the sidebar (schema in `data/README.md`).
 
-Portfolio project. Author details available on request.
+Portfolio project. Made by Ami Sata.
 
 ## Run it
 
