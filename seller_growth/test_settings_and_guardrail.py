@@ -21,16 +21,56 @@ from revenue import HUMAN, Settings, break_even_grid, break_even_stake, route_pl
 DATA = pd.read_csv(HERE / "example_products.csv")
 
 
+S12 = sum(0.97 ** t for t in range(1, 13))      # months still trading out of 12 at 3% monthly churn
+F12 = 0.70 * S12                                  # x OnCommerce contribution margin
+
+
+class TestCostBuildUp(unittest.TestCase):
+    def test_call_and_message_cost_defaults(self):
+        a = Settings()
+        self.assertAlmostEqual(a.human_cost, 45000 / 1600 * 1.4)        # £39.375
+        self.assertAlmostEqual(round(a.human_cost, 2), 39.38)
+        self.assertAlmostEqual(a.auto_cost, 1500 / 2000 + 0.05)         # £0.80
+        self.assertAlmostEqual(a.auto_cost, 0.80)
+
+    def test_build_up_inputs_and_overrides(self):
+        a = Settings(sse_annual_cost=60000, sse_productive_hours=1500, call_hours=2, journey_build_cost=500,
+                     journey_sellers_reached=1000, message_send_cost=0.10)
+        self.assertAlmostEqual(a.human_cost, 80.0)
+        self.assertAlmostEqual(a.auto_cost, 0.60)
+        b = Settings(call_cost_override=120, message_cost_override=2)
+        self.assertEqual((b.human_cost, b.auto_cost), (120, 2))
+
+    def test_build_up_text_shows_the_arithmetic(self):
+        from workings import cost_buildup_text
+        t = cost_buildup_text(Settings())
+        self.assertIn("£45,000 fully loaded yearly cost of a Seller Success exec ÷ 1,600 productive hours a year = "
+                      "£28.12 an hour, × 1.4 hours per completed call", t)
+        self.assertIn("= £39.38", t)
+        self.assertIn("£1,500 to build and maintain the journey ÷ 2,000 sellers reached = £0.75, + £0.05 to send = "
+                      "£0.80", t)
+        self.assertIn("Neither is OnCommerce data.", t)
+
+
 class TestBreakEven(unittest.TestCase):
     def test_formula_at_defaults(self):
         a = Settings()
-        # (call cost - message cost) / (12 x (call success - message success)) = (120 - 2) / (12 x 0.20)
-        self.assertAlmostEqual(break_even_stake(a), 118 / 2.4)
-        self.assertAlmostEqual(round(break_even_stake(a), 2), 49.17)
+        # (call cost - message cost) / (margin x months still trading x (call success - message success))
+        self.assertAlmostEqual(break_even_stake(a), (39.375 - 0.80) / (F12 * 0.20))
+        self.assertAlmostEqual(round(break_even_stake(a), 2), 27.83)
+
+    def test_cost_change_alone_would_give_16(self):
+        # The steering estimate of about £16 is the new costs on the old revenue basis (12 months, no margin, no churn)
+        a = Settings(contribution_margin=1.0, monthly_churn=0.0)
+        self.assertAlmostEqual(round(break_even_stake(a), 2), 16.07)
+        # and the old £120/£2 costs on the old basis give the old £49.17
+        old = Settings(contribution_margin=1.0, monthly_churn=0.0, call_cost_override=120, message_cost_override=2)
+        self.assertAlmostEqual(round(break_even_stake(old), 2), 49.17)
 
     def test_formula_other_values_and_no_gap(self):
-        a = Settings(human_cost=240, auto_cost=5, p_success_human=0.5, p_success_auto=0.2, value_horizon_months=6)
-        self.assertAlmostEqual(break_even_stake(a), 235 / (6 * 0.3))
+        a = Settings(call_cost_override=240, message_cost_override=5, p_success_human=0.5, p_success_auto=0.2,
+                     value_horizon_months=6, monthly_churn=0.0, contribution_margin=0.5)
+        self.assertAlmostEqual(break_even_stake(a), 235 / (0.5 * 6 * 0.3))
         self.assertEqual(break_even_stake(Settings(p_success_human=0.1, p_success_auto=0.2)), float("inf"))
 
     def test_break_even_matches_routing(self):
@@ -42,9 +82,28 @@ class TestBreakEven(unittest.TestCase):
     def test_grid(self):
         g = break_even_grid(Settings())
         self.assertEqual(g.shape, (3, 3))
-        self.assertAlmostEqual(g.iloc[0, 0], (60 - 2) / (12 * 0.10))
-        self.assertAlmostEqual(g.iloc[1, 1], (120 - 2) / (12 * 0.20))
-        self.assertAlmostEqual(g.iloc[2, 2], (240 - 2) / (12 * 0.30))
+        self.assertEqual(list(g.index), ["£20", "£40", "£80"])
+        self.assertAlmostEqual(g.iloc[0, 0], (20 - 0.80) / (F12 * 0.10))
+        self.assertAlmostEqual(g.iloc[1, 1], (40 - 0.80) / (F12 * 0.20))
+        self.assertAlmostEqual(g.iloc[2, 2], (80 - 0.80) / (F12 * 0.30))
+
+
+class TestCallVsMessageNetValue(unittest.TestCase):
+    def test_net_values_and_winner(self):
+        a = Settings()
+        for stake in (5, 20, 27, 29, 100, 400):
+            route, vh, va, _ = route_play(stake, a)
+            self.assertAlmostEqual(vh, stake * F12 * 0.35 - 39.375)
+            self.assertAlmostEqual(va, stake * F12 * 0.15 - 0.80)
+            self.assertEqual(route == HUMAN, vh > va)
+        self.assertNotEqual(route_play(27, a)[0], HUMAN)
+        self.assertEqual(route_play(29, a)[0], HUMAN)
+
+    def test_why_route_names_both_values(self):
+        from revenue import why_route
+        t = why_route(100, Settings())
+        self.assertIn("call", t.lower())
+        self.assertIn("message", t.lower())
 
 
 class TestPlainWords(unittest.TestCase):
@@ -53,14 +112,16 @@ class TestPlainWords(unittest.TestCase):
         from revenue import AUTOMATED
         a = Settings()
         t = call_or_message_text(a)
-        self.assertIn("A call costs about £120 of staff time and works about 35% of the time.", t)
-        self.assertIn("A call works 20 percentage points more often but costs £118 more", t)
-        self.assertIn("£118 ÷ (12 × 20%) ≈ £49 a month. Above it: call. Below it: send the message.", t)
+        self.assertIn("A call costs about £39.38 of staff time and works about 35% of the time.", t)
+        self.assertIn("A message costs about £0.80 and works about 15% of the time.", t)
+        self.assertIn("A call works 20 percentage points more often but costs £38.58 more", t)
+        self.assertIn("£38.58 ÷ (70% × 9.9 × 20%) ≈ £28 of platform revenue a month. Above it: call. Below it: "
+                      "send the message.", t)
         self.assertEqual(play_sentence({"stake_month": 200, "route": HUMAN, "expected_month": 70}, a),
-                         "£200 a month at stake, above the £49 tipping point, so call. Expected gain £70 a month.")
+                         "£200 a month at stake, above the £28 tipping point, so call. Expected extra revenue £70 a month.")
         self.assertEqual(play_sentence({"stake_month": 20, "route": AUTOMATED, "expected_month": 3}, a),
-                         "£20 a month at stake, below the £49 tipping point, so send the message. "
-                         "Expected gain £3 a month.")
+                         "£20 a month at stake, below the £28 tipping point, so send the message. "
+                         "Expected extra revenue £3 a month.")
         for play in run_all(DATA, a)[2].to_dict("records"):   # wording always agrees with the rules' route
             self.assertEqual("so call." in play_sentence(play, a), play["route"] == HUMAN)
 
@@ -89,7 +150,8 @@ class TestSellerValueWorkings(unittest.TestCase):
                     self.assertEqual(res["4c."], _gbp(r["est_boost_month"]))
                     self.assertEqual(res["5."], _gbp(r["ltv"]))
                     for st in steps:
-                        self.assertTrue(st["source"].startswith(("Real", "Assumed", "Worked out")), st)
+                        self.assertTrue(st["source"].startswith(("Published", "Observed in sample", "Assumption",
+                                                                 "Model estimate")), st)
 
     def test_plain_labels_and_ratio_text(self):
         from workings import orders_source_label, reviews_per_order_text, seller_value_workings
@@ -110,7 +172,7 @@ class TestSettings(unittest.TestCase):
     def test_hash_is_deterministic_and_sensitive(self):
         self.assertEqual(settings_hash(Settings()), settings_hash(Settings()))
         self.assertEqual(len(settings_hash(Settings())), 12)
-        self.assertNotEqual(settings_hash(Settings()), settings_hash(Settings(human_cost=121)))
+        self.assertNotEqual(settings_hash(Settings()), settings_hash(Settings(call_hours=1.5)))
         a = Settings()
         a.season_profiles["heating"][0] = 9.9
         self.assertNotEqual(settings_hash(a), settings_hash(Settings()))

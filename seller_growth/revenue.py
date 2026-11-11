@@ -23,6 +23,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from dataclasses import replace as dc_replace
 from dataclasses import asdict, dataclass, field
 from datetime import date
 
@@ -123,9 +124,11 @@ class Settings:
     boost_incremental_share: float = 0.50    # extra sales created by Boost, as a share of boosted sales
     seller_margin: float = 0.35              # seller gross margin before OnBuy fees
     # --- ESTIMATE: plays ---------------------------------------------------
-    partner_sales_uplift: float = 0.05       # sales lift from Partner features (comparison tables, showcase)
-    pro_sales_uplift: float = 0.04           # extra lift from Professional badge, logo, carousels
+    # Sales lift a seller gets from the next tier's features. No public evidence, so a cautious 2% by default.
+    partner_sales_uplift: float = 0.02       # sales lift from Partner features (comparison tables, showcase)
+    pro_sales_uplift: float = 0.02           # extra lift from Professional badge, logo, carousels
     churn_fee_ratio: float = 0.05            # subscription / est. monthly GMV above this = churn risk
+    at_risk_loss_prob: float = 0.30          # share of at-risk sellers who would cancel or downgrade without help
     quality_threshold: int = 70
     price_gap_threshold: float = 0.10
     first_sale_units: float = 2.0            # units/month a fixed zero-review listing could reach
@@ -135,14 +138,38 @@ class Settings:
     # --- ESTIMATE: route = automated vs human (seller value vs cost to serve) --
     p_success_human: float = 0.35
     p_success_auto: float = 0.15
-    human_cost: float = 120.0                # £ per seller intervention (account manager time)
-    auto_cost: float = 2.0                   # £ per automated journey (messages, tooling)
+    # Cost of a call, built up (rough estimates, not OnCommerce data):
+    #   fully loaded yearly cost of a Seller Success exec / productive hours a year x hours per completed call
+    sse_annual_cost: float = 45000.0
+    sse_productive_hours: float = 1600.0
+    call_hours: float = 1.4                  # prep, attempts, the call, follow-up and CRM notes
+    # Cost of an automated message per seller: journey build and upkeep / sellers reached + sending cost
+    journey_build_cost: float = 1500.0
+    journey_sellers_reached: float = 2000.0
+    message_send_cost: float = 0.05
+    call_cost_override: float | None = None      # set only to test a fixed call cost (sensitivity grid, tests)
+    message_cost_override: float | None = None
     value_horizon_months: float = 12.0
     # --- ESTIMATE: forecast and LTV ---------------------------------------
     monthly_churn: float = 0.03
     monthly_upgrade_rate: float = 0.02
     contribution_margin: float = 0.70        # OnCommerce margin on seller revenue (for LTV)
     play_ramp_months: int = 3
+
+    @property
+    def human_cost(self) -> float:
+        """£ per Seller Success call: yearly cost / productive hours x hours per call (unless overridden)."""
+        if self.call_cost_override is not None:
+            return float(self.call_cost_override)
+        return self.sse_annual_cost / self.sse_productive_hours * self.call_hours if self.sse_productive_hours else 0.0
+
+    @property
+    def auto_cost(self) -> float:
+        """£ per seller for an automated message: build cost / sellers reached + send cost (unless overridden)."""
+        if self.message_cost_override is not None:
+            return float(self.message_cost_override)
+        build = self.journey_build_cost / self.journey_sellers_reached if self.journey_sellers_reached else 0.0
+        return build + self.message_send_cost
 
     def rate_for(self, subcategory: str) -> float:
         if self.ac_dehum_as_large_appliance and subcategory in LARGE_APPLIANCE_CANDIDATES:
@@ -161,17 +188,32 @@ def settings_hash(a: Settings) -> str:
     return hashlib.sha256(json.dumps(asdict(a), sort_keys=True, default=str).encode()).hexdigest()[:12]
 
 
+def survival_months(a: Settings) -> float:
+    """Expected months a seller is still trading over the horizon: sum of (1 - churn)^t for t = 1..horizon.
+    The same monthly churn is used for LTV and the forecast."""
+    h = int(round(a.value_horizon_months))
+    return float(sum((1 - a.monthly_churn) ** t for t in range(1, h + 1)))
+
+
+def contribution_factor(a: Settings) -> float:
+    """£ of OnCommerce contribution over the horizon per £1 a month of extra platform revenue that lasts:
+    contribution margin x survival-weighted months."""
+    return a.contribution_margin * survival_months(a)
+
+
 def break_even_stake(a: Settings, call_cost: float | None = None, success_gap: float | None = None) -> float:
-    """£ a month at stake above which a Seller Success call beats an automated message:
-    (call cost - message cost) / (months x (call success - message success)). inf if the call is never better."""
+    """£ of platform revenue a month at stake above which a Seller Success call beats an automated message:
+    (call cost - message cost) / (contribution margin x survival-weighted months x (call success - message
+    success)). inf if the call is never more successful."""
     cc = a.human_cost if call_cost is None else call_cost
     gap = (a.p_success_human - a.p_success_auto) if success_gap is None else success_gap
-    if gap <= 0:
+    f = contribution_factor(a)
+    if gap <= 0 or f <= 0:
         return float("inf")
-    return (cc - a.auto_cost) / (a.value_horizon_months * gap)
+    return (cc - a.auto_cost) / (f * gap)
 
 
-def break_even_grid(a: Settings, call_costs=(60.0, 120.0, 240.0), gaps=(0.10, 0.20, 0.30)) -> pd.DataFrame:
+def break_even_grid(a: Settings, call_costs=(20.0, 40.0, 80.0), gaps=(0.10, 0.20, 0.30)) -> pd.DataFrame:
     """Break-even £/month for each call cost (rows) and success gap in points (columns); message cost from a."""
     df = pd.DataFrame({f"{g * 100:.0f} points": [break_even_stake(a, c, g) for c in call_costs] for g in gaps},
                       index=[f"£{c:.0f}" for c in call_costs])
@@ -183,6 +225,15 @@ def break_even_grid(a: Settings, call_costs=(60.0, 120.0, 240.0), gaps=(0.10, 0.
 # ---------------------------------------------------------------------------
 # Seasonality and demand
 # ---------------------------------------------------------------------------
+def _num(x) -> float:
+    """A missing number (None or NaN) counts as 0."""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return 0.0
+    return 0.0 if v != v else v
+
+
 def season_index(subcategory: str, month: int, a: Settings) -> float:
     """ESTIMATE: demand index for this month (1 = average month), damped by seasonality_strength."""
     prof = a.season_profiles[season_group(subcategory, a)]
@@ -228,7 +279,7 @@ def evaluate_climate(df: pd.DataFrame, a: Settings) -> pd.DataFrame:
         elif a.use_first_review_window and isinstance(r.get("oldest_visible_review"), str) and r["oldest_visible_review"]:
             window = max(window, months_since(r["oldest_visible_review"]))   # reviews go back at least this far
         qa.review_window_months = window
-        dp = float(r["price"]) + float(r.get("delivery_fee") or 0.0)
+        dp = float(r["price"]) + _num(r.get("delivery_fee"))
         rate = a.rate_for(r["subcategory"])
         avg_units = est_monthly_units(int(r.get("product_review_count") or 0), months_since(r["latest_review"] or None),
                                       "", qa)
@@ -248,7 +299,7 @@ def evaluate_climate(df: pd.DataFrame, a: Settings) -> pd.DataFrame:
         # Average selling price per unit, incl. delivery: each offer's price weighted by its share of the
         # product's sales (the recommended offer carries the delivery fee). One offer: just the delivered price.
         if len(offers) > 1:
-            fee = float(r.get("delivery_fee") or 0.0)
+            fee = _num(r.get("delivery_fee"))
             avg_price = sum(sh * (op + fee * (i == 0)) for i, (op, sh) in enumerate(zip(offers, offer_shares(len(offers), a))))
         else:
             avg_price = dp
@@ -324,10 +375,10 @@ def seller_table(products: pd.DataFrame, a: Settings,
             d["offers"] += 1
             d["subcats"].add(r["subcategory"])
             d["product_ids"].append(r["product_id"])
-            d["prices"].append(p + (r.get("delivery_fee") or 0.0) * (i == 0))
+            d["prices"].append(p + _num(r.get("delivery_fee")) * (i == 0))
             u = r["est_units_month"] * sh
             d["climate_units"] += u
-            d["climate_gmv"] += u * (p + (r.get("delivery_fee") or 0.0) * (i == 0))
+            d["climate_gmv"] += u * (p + _num(r.get("delivery_fee")) * (i == 0))
             d["climate_commission"] += u * max(r["commission_rate"] * p, a.min_fee)
             if i < len(pros) and pros[i] == "1":
                 d["pro_badge"] = True              # REAL: Professional Seller tag on this offer row
@@ -393,13 +444,30 @@ def revenue_mix(sellers: pd.DataFrame) -> dict:
 # Plays
 # ---------------------------------------------------------------------------
 def route_play(stake_month: float, a: Settings) -> tuple[str, float, float, float]:
-    """Seller value vs cost to serve. Value over the horizon of each route, net of its cost:
-    human = stake x horizon x p_human - human_cost ; automated = stake x horizon x p_auto - auto_cost.
-    Returns (route, net value human, net value automated, expected £/month for the chosen route)."""
-    vh = stake_month * a.value_horizon_months * a.p_success_human - a.human_cost
-    va = stake_month * a.value_horizon_months * a.p_success_auto - a.auto_cost
+    """Seller Success call or automated message, on OnCommerce contribution, not GMV.
+    stake_month = extra platform revenue a month if the action works (fees and commission, not seller sales).
+    Net contribution of a route = stake x contribution margin x survival-weighted months x success rate - its cost.
+    Returns (route, net contribution if called, net contribution if messaged, expected extra revenue a month)."""
+    f = contribution_factor(a)
+    vh = stake_month * f * a.p_success_human - a.human_cost
+    va = stake_month * f * a.p_success_auto - a.auto_cost
     route = HUMAN if vh > va else AUTOMATED
     return route, vh, va, stake_month * (a.p_success_human if route == HUMAN else a.p_success_auto)
+
+
+def why_route(stake_month: float, a: Settings) -> str:
+    """Why the chosen route wins, with both net values after cost."""
+    _, vh, va, _ = route_play(stake_month, a)
+    nets = (f"Net contribution after cost: call £{vh:,.0f} (cost £{a.human_cost:,.2f}), message £{va:,.0f} "
+            f"(cost £{a.auto_cost:,.2f}).")
+    be = break_even_stake(a)
+    if be == float("inf"):
+        return "A call is not more successful than a message here, so the cheaper message wins. " + nets
+    if vh > va:
+        return (f"£{stake_month:,.0f} a month is at stake, above the £{be:,.0f} tipping point, so the higher success "
+                "rate of a call is worth its extra cost. " + nets)
+    return (f"£{stake_month:,.0f} a month is at stake, below the £{be:,.0f} tipping point, so the extra cost of a "
+            "call is not repaid and the automated message wins. " + nets)
 
 
 def boost_seller_roi(level: float, a: Settings, rate: float) -> float:
@@ -415,26 +483,74 @@ def best_boost_level(a: Settings, rate: float) -> str | None:
 
 
 def upgrade_case(seller: dict, a: Settings) -> dict | None:
-    """Standard->Partner or Partner->Professional when the seller's estimated sales lift pays the extra fee."""
+    """Standard->Partner or Partner->Professional, judged on the SELLER's economics first.
+    Extra sales = account GMV x assumed sales lift from the next tier (an assumption, default 2%).
+    Seller extra profit = extra sales x (seller margin - commission) - extra subscription.
+    No case (None) if the seller would not be better off at today's price. Needs validation when the seller is only
+    better off on thin margins, would lose money at the Jan 2028 list price, or the tier or orders are estimated."""
     tier = seller["tier"]
     if tier == "Professional":
         return None
     nxt = TIERS[TIERS.index(tier) + 1]
-    fee_delta = a.sub_promo[nxt] - a.sub_promo[tier]
-    uplift = a.partner_sales_uplift if nxt == "Partner" else a.pro_sales_uplift
-    gain = seller["est_account_gmv_month"] * uplift * a.seller_margin
-    if gain <= fee_delta:
+    gmv = float(seller.get("est_account_gmv_month") or 0.0)
+    if gmv <= 0:
         return None
-    return {"next_tier": nxt, "fee_delta": fee_delta, "seller_gain": gain,
-            "stake": fee_delta + seller["est_account_gmv_month"] * uplift * a.commission_rate}
+    fee_delta = a.sub_promo[nxt] - a.sub_promo[tier]
+    fee_delta_list = a.sub_list[nxt] - a.sub_list[tier]
+    uplift = a.partner_sales_uplift if nxt == "Partner" else a.pro_sales_uplift
+    extra_sales = gmv * uplift
+    extra_profit = extra_sales * (a.seller_margin - a.commission_rate)
+    seller_net = extra_profit - fee_delta
+    if seller_net <= 0:
+        return None
+    seller_net_list = extra_profit - fee_delta_list
+    reasons = []
+    if not str(seller.get("tier_source", "")).startswith("SHOWN"):
+        reasons.append("current tier is estimated, not shown")
+    if not str(seller.get("orders_source", "")).startswith("SHOWN"):
+        reasons.append("order volume is estimated from reviews")
+    if seller_net_list <= 0:
+        reasons.append("seller would lose money at the January 2028 list price")
+    if seller_net < fee_delta:
+        reasons.append("seller gain is thin compared with the extra fee")
+    return {"next_tier": nxt, "fee_delta": fee_delta, "fee_delta_list": fee_delta_list, "uplift": uplift,
+            "extra_sales": extra_sales, "seller_gain": extra_profit, "seller_net": seller_net,
+            "seller_net_list": seller_net_list, "needs_validation": bool(reasons), "validation_reasons": reasons,
+            "stake": fee_delta + extra_sales * a.commission_rate}
+
+
+FIX_TYPES = (LEAK_OOS, LEAK_DELIVERY, LEAK_DUP, LEAK_PRICE, FIRST_SALE)
+OPPORTUNITY = {LEAK_OOS: "Fix a sales leak", LEAK_DELIVERY: "Fix a sales leak", LEAK_DUP: "Fix a sales leak",
+               LEAK_PRICE: "Fix a sales leak", FIRST_SALE: "Improve listings and range", BOOST: "Boost advertising",
+               UPGRADE: "Subscription upgrade", RETAIN: "Retention or downgrade risk"}
+NEXT_REVIEW_DAYS = {LEAK_OOS: 14, LEAK_PRICE: 14, LEAK_DELIVERY: 30, LEAK_DUP: 30, FIRST_SALE: 30, BOOST: 30,
+                    UPGRADE: 60, RETAIN: 30}
+
+
+def _confidence(ptype: str, evidence: dict) -> str:
+    """Low or Medium; never High, because the data is synthetic and the uplifts are assumptions."""
+    if ptype in (UPGRADE, RETAIN):
+        est = (not str(evidence.get("orders_source", "")).startswith("SHOWN")
+               or not str(evidence.get("tier_source", "")).startswith("SHOWN"))
+        return "Low" if est or evidence.get("needs_validation") else "Medium"
+    return "Low" if int(evidence.get("product_reviews", 0) or 0) < 5 else "Medium"
 
 
 def _play(ptype, seller, rule, stake, evidence, a, product=None):
     route, vh, va, exp = route_play(stake, a)
-    return {"play_type": ptype, "seller": seller, "product_id": (product or {}).get("product_id", ""),
+    p = a.p_success_human if route == HUMAN else a.p_success_auto
+    cost = a.human_cost if route == HUMAN else a.auto_cost
+    s_m = survival_months(a)
+    return {"play_type": ptype, "opportunity": OPPORTUNITY[ptype], "seller": seller,
+            "product_id": (product or {}).get("product_id", ""),
             "title": (product or {}).get("title", ""), "subcategory": (product or {}).get("subcategory", ""),
             "rule": rule, "stake_month": stake, "route": route, "net_value_human": vh, "net_value_auto": va,
-            "expected_month": exp, "evidence": evidence}
+            "p_success": p, "intervention_cost": cost, "expected_month": exp,
+            "expected_revenue_horizon": stake * p * s_m,
+            "expected_contribution": stake * p * contribution_factor(a),
+            "net_contribution": max(vh, va), "why_route": why_route(stake, a),
+            "confidence": _confidence(ptype, evidence), "next_review_days": NEXT_REVIEW_DAYS[ptype],
+            "evidence": evidence}
 
 
 def generate_plays(products: pd.DataFrame, sellers: pd.DataFrame, a: Settings) -> pd.DataFrame:
@@ -448,7 +564,12 @@ def generate_plays(products: pd.DataFrame, sellers: pd.DataFrame, a: Settings) -
         up = upgrade_case(s, a)
         if up:
             ev = dict(base, next_tier=up["next_tier"], next_tier_features=TIER_FEATURES[up["next_tier"]],
-                      extra_fee_month_gbp=up["fee_delta"], est_seller_gain_month_gbp=round(up["seller_gain"], 2))
+                      extra_fee_month_gbp=up["fee_delta"], extra_fee_after_jan_2028_gbp=up["fee_delta_list"],
+                      assumed_sales_lift=up["uplift"], est_seller_gain_month_gbp=round(up["seller_gain"], 2),
+                      est_seller_net_month_gbp=round(up["seller_net"], 2),
+                      est_seller_net_after_jan_2028_gbp=round(up["seller_net_list"], 2),
+                      needs_validation=up["needs_validation"],
+                      validation_reasons="; ".join(up["validation_reasons"]) or "none")
             plays.append(_play(UPGRADE, s["seller"], "sales_lift_pays_next_tier", up["stake"], ev, a))
         promo_step = s["tier"] in ("Partner", "Professional") and s["fee_to_sales_list"] > a.churn_fee_ratio
         if s["fee_to_sales"] > a.churn_fee_ratio or promo_step:
@@ -457,7 +578,14 @@ def generate_plays(products: pd.DataFrame, sellers: pd.DataFrame, a: Settings) -
                       list_price_after_jan_2028_gbp=a.sub_list[s["tier"]], latest_review=s["latest_review"] or "none")
             rule = ("no_sales_evidence" if not s["lifetime_orders"] else "fee_to_sales_high"
                     if s["fee_to_sales"] > a.churn_fee_ratio else "promo_price_step_jan_2028")
-            plays.append(_play(RETAIN, s["seller"], rule, s["est_revenue_month"], ev, a))
+            # Expected revenue at risk = what would be lost x the chance it is lost without help (assumption).
+            if rule == "promo_price_step_jan_2028":
+                lower = TIERS[TIERS.index(s["tier"]) - 1]          # downgrade risk: the tier difference is at risk
+                stake = (a.sub_promo[s["tier"]] - a.sub_promo[lower]) * a.at_risk_loss_prob
+            else:                                                   # cancellation risk: the whole account
+                stake = s["est_revenue_month"] * a.at_risk_loss_prob
+            ev["chance_of_loss_without_help"] = a.at_risk_loss_prob
+            plays.append(_play(RETAIN, s["seller"], rule, stake, ev, a))
     for r in products.to_dict("records"):
         seller = r["seller"]
         if not seller:
@@ -469,19 +597,18 @@ def generate_plays(products: pd.DataFrame, sellers: pd.DataFrame, a: Settings) -
                "est_units_month": round(r["est_units_month"], 1),
                "est_commission_month_gbp": round(r["est_commission_month"], 2), "quality_score": r["quality_score"]}
         live = not r["flag_out_of_stock"] and not r["flag_price_anomaly"]
-        gap = (r["price"] - r["lowest_offer"]) / r["lowest_offer"] if r["lowest_offer"] else 0.0
-        # Boost: good, competitive, in-season listing without a Bestseller badge
-        lvl = best_boost_level(a, r["commission_rate"])
-        if (live and lvl and r["quality_score"] >= a.quality_threshold and gap <= a.price_gap_threshold
-                and r["badge"] != "Bestseller" and r["season_index_now"] >= 1.0):
-            L, sh, i = a.boost_levels[lvl], a.boosted_share_of_gmv, a.boost_incremental_share
-            gmv = r["est_units_month"] * r["delivered_price"]
-            stake = gmv * sh * (1 + i) * L + r["est_units_month"] * sh * i * r["commission_per_unit"]
+        # Boost: in stock, good quality, competitive, in season, not a Bestseller, pays back for seller and platform
+        ok, why_not = boost_eligibility(r, a)
+        if ok:
+            lvl = best_boost_level(a, r["commission_rate"])
+            stake = boost_stake(r, a, lvl)
+            L = a.boost_levels[lvl]
             ev = dict(pev, suggested_boost_level=f"{lvl} ({L:.0%})",
                       seller_boost_roi=round(boost_seller_roi(L, a, r["commission_rate"]), 2),
                       breakeven_incremental_share=round(L / (a.seller_margin - r["commission_rate"] - L), 2)
                       if a.seller_margin - r["commission_rate"] - L > 0 else "n/a")
-            plays.append(_play(BOOST, seller, "in_season_quality_listing_no_bestseller", stake, ev, a, r))
+            if stake * contribution_factor(a) * a.p_success_auto > a.auto_cost:   # economics must pay back
+                plays.append(_play(BOOST, seller, "in_season_quality_listing_no_bestseller", stake, ev, a, r))
         # Listing fix to unlock the first / more sales
         if live and (r["product_review_count"] == 0 or r["quality_score"] < a.quality_threshold):
             if r["product_review_count"] == 0:
@@ -500,7 +627,7 @@ def generate_plays(products: pd.DataFrame, sellers: pd.DataFrame, a: Settings) -
         if r["flag_duplicate_page"]:
             plays.append(_play(LEAK_DUP, seller, "duplicate_page", a.merge_uplift * r["est_commission_month"],
                                dict(pev, notes=r["listing_notes"]), a, r))
-        if live and ((r["delivery_fee"] or 0) > 0 or (pd.notna(r["delivery_max_days"]) and r["delivery_max_days"] > 7)):
+        if live and (_num(r["delivery_fee"]) > 0 or (pd.notna(r["delivery_max_days"]) and r["delivery_max_days"] > 7)):
             plays.append(_play(LEAK_DELIVERY, seller, "paid_or_slow_delivery", a.delivery_uplift * r["est_commission_month"],
                                dict(pev, delivery_fee_gbp=r["delivery_fee"], delivery_max_days=r["delivery_max_days"]), a, r))
         prices = [float(x) for x in _split(r["offer_prices"])]
@@ -513,16 +640,156 @@ def generate_plays(products: pd.DataFrame, sellers: pd.DataFrame, a: Settings) -
     out = pd.DataFrame(plays)
     if out.empty:
         return out
-    out = out.sort_values(["expected_month", "stake_month"], ascending=False).reset_index(drop=True)
-    out.insert(0, "rank", range(1, len(out) + 1))
-    out.insert(1, "play_id", [f"P{i:02d}" for i in range(1, len(out) + 1)])
-    return out
+    return assign_actions(out)
+
+
+def assign_actions(plays: pd.DataFrame) -> pd.DataFrame:
+    """Next best action per seller, counted once.
+    1. Fix first: if a seller has a sales leak or listing problem, Boost and upgrade are deferred until it is fixed.
+    2. One primary action per seller: the best remaining action by expected net contribution (not by fee). An action
+       marked Needs validation (an upgrade resting on estimates) only leads when the seller has nothing firmer.
+    3. One optional secondary action. Only primary actions count towards totals, so no value is counted twice.
+    Rank = order of primary actions by expected net contribution; other actions follow."""
+    if plays.empty:
+        return plays
+    df = plays.copy()
+    df["status"] = "Recommended"
+    df.loc[(df["play_type"] == UPGRADE) & df["evidence"].map(lambda e: bool(e.get("needs_validation"))),
+           "status"] = "Needs validation"
+    has_fix = df[df["play_type"].isin(FIX_TYPES)].groupby("seller").size()
+    defer = df["play_type"].isin([BOOST, UPGRADE]) & df["seller"].isin(has_fix.index)
+    df.loc[defer, "status"] = "Deferred: fix first"
+    df["role"] = "Other"
+    df["_d"] = defer.astype(int)
+    df["_v"] = (df["status"] == "Needs validation").astype(int)
+    df = df.sort_values(["_d", "_v", "net_contribution", "stake_month"], ascending=[True, True, False, False])
+    n = df.groupby("seller").cumcount()
+    df.loc[n == 0, "role"] = "Primary"
+    df.loc[n == 1, "role"] = "Secondary"
+    df["counted"] = df["role"] == "Primary"
+    df["_r"] = df["role"].map({"Primary": 0, "Secondary": 1, "Other": 2})
+    df = df.sort_values(["_r", "_v", "net_contribution", "stake_month"], ascending=[True, True, False, False])
+    df = df.drop(columns=["_d", "_v", "_r"]).reset_index(drop=True)
+    df.insert(0, "rank", range(1, len(df) + 1))
+    df.insert(1, "play_id", [f"P{i:02d}" for i in range(1, len(df) + 1)])
+    return df
+
+
+def boost_eligibility(r: dict, a: Settings) -> tuple[bool, str]:
+    """Boost only for a listing that can sell and is worth advertising. Returns (eligible, reason if not)."""
+    if r["flag_out_of_stock"]:
+        return False, "out of stock"
+    if r["flag_price_anomaly"]:
+        return False, "price looks wrong"
+    if r["quality_score"] < a.quality_threshold or r.get("flag_duplicate_page"):
+        return False, "listing quality problems to fix first"
+    gap = (r["price"] - r["lowest_offer"]) / r["lowest_offer"] if r["lowest_offer"] else 0.0
+    if gap > a.price_gap_threshold:
+        return False, "not price competitive"
+    if r["badge"] == "Bestseller":
+        return False, "already a Bestseller"
+    if r["season_index_now"] < 1.0:
+        return False, "out of season"
+    if r["est_units_month"] <= 0:
+        return False, "no sales to build on"
+    if best_boost_level(a, r["commission_rate"]) is None:
+        return False, "Boost would not pay back for the seller"
+    return True, ""
+
+
+def boost_stake(r: dict, a: Settings, lvl: str) -> float:
+    """Extra platform revenue a month if a seller not yet using Boost starts: Boost fees on boosted sales (including
+    the extra ones) plus commission on the extra sales, x the share of sellers not already boosting (Boost fees from
+    sellers already boosting are in the base revenue, so they are not counted again)."""
+    L, sh, i = a.boost_levels[lvl], a.boosted_share_of_gmv, a.boost_incremental_share
+    gmv = r["est_units_month"] * r["delivered_price"]
+    fees = gmv * sh * (1 + i) * L + r["est_units_month"] * sh * i * r["commission_per_unit"]
+    return fees * (1 - a.boost_adoption)
 
 
 def top_play_per_seller(plays: pd.DataFrame) -> pd.DataFrame:
+    """The primary action of each seller (the only one counted in totals)."""
     if plays.empty:
         return plays
-    return plays.drop_duplicates("seller").reset_index(drop=True)
+    return plays[plays["role"] == "Primary"].reset_index(drop=True)
+
+
+def actionable(plays: pd.DataFrame) -> pd.DataFrame:
+    """Primary actions that are Recommended (not deferred, not awaiting validation) and worth more than they cost."""
+    if plays.empty:
+        return plays
+    prim = top_play_per_seller(plays)
+    return prim[(prim["status"] == "Recommended") & (prim["net_contribution"] > 0)]
+
+
+def portfolio_summary(sellers: pd.DataFrame, plays: pd.DataFrame, a: Settings) -> dict:
+    """Headline figures for a set of sellers. Each seller once; each seller's primary action only, and only if it
+    is Recommended (Needs validation is reported separately, not counted)."""
+    act = actionable(plays)
+    n_h = int((act["route"] == HUMAN).sum()) if not act.empty else 0
+    return {"sellers": int(len(sellers)), "revenue_month": float(sellers["est_revenue_month"].sum()),
+            "actionable": int(len(act)), "human": n_h, "automated": int(len(act) - n_h),
+            "net_contribution": float(act["net_contribution"].sum()) if not act.empty else 0.0,
+            "intervention_cost": float(act["intervention_cost"].sum()) if not act.empty else 0.0,
+            "expected_month": float(act["expected_month"].sum()) if not act.empty else 0.0,
+            "deferred": int((plays["status"] == "Deferred: fix first").sum()) if not plays.empty else 0,
+            "needs_validation": int((plays["status"] == "Needs validation").sum()) if not plays.empty else 0,
+            "primary_needs_validation": int(((plays["status"] == "Needs validation") & (plays["role"] == "Primary"))
+                                            .sum()) if not plays.empty else 0}
+
+
+def overview_by_category(df_all: pd.DataFrame, cats: list) -> tuple[list[dict], dict, pd.DataFrame]:
+    """cats = [(key, label, subcategories, Settings)]. Seller labels are per category (Example Seller A under
+    Heaters is not Example Seller A under Fans), so totals are the sum of per-category summaries, never a merged run."""
+    rows, sums, tops = [], None, []
+    for _key, label, subcats, a in cats:
+        _p, s_, pl = run_category(df_all, subcats, a)
+        sm = portfolio_summary(s_, pl, a)
+        sums = dict(sm) if sums is None else {k: sums[k] + v for k, v in sm.items()}
+        act = actionable(pl)
+        lead = act.iloc[0] if len(act) else None
+        rows.append({"Category": label, "Sellers": sm["sellers"],
+                     "Platform revenue £/mo": round(sm["revenue_month"]),
+                     "Actionable sellers": sm["actionable"], "Calls · messages": f"{sm['human']} · {sm['automated']}",
+                     "Net contribution £ (after cost)": round(sm["net_contribution"]),
+                     "Leading action": "" if lead is None else f"{lead['play_type']}, {lead['seller']}"})
+        for r in act.head(5).itertuples():
+            tops.append({"Seller (category)": f"{r.seller} ({label})", "Action": r.play_type, "Route": r.route,
+                         "Platform revenue at stake £/mo": round(r.stake_month),
+                         "Net contribution £ (after cost)": round(r.net_contribution), "Confidence": r.confidence})
+    top = pd.DataFrame(tops)
+    if len(top):
+        top = top.sort_values("Net contribution £ (after cost)", ascending=False).head(5)
+    return rows, sums or {}, top
+
+
+def sensitivity_table(df_all: pd.DataFrame, subcats, a: Settings) -> pd.DataFrame:
+    """Recompute the headline figures with one weak assumption moved low or high, the rest unchanged."""
+    tests = [
+        ("1 in N buyers leaves a review", "review_rate", [(f"1 in {round(1 / (a.review_rate * 2))}", a.review_rate * 2),
+                                                          (f"1 in {round(1 / (a.review_rate / 2))}", a.review_rate / 2)]),
+        ("Upgrade sales lift (Partner)", "partner_sales_uplift", [("0%", 0.0), ("5%", 0.05)]),
+        ("Call success rate", "p_success_human", [(f"{a.p_success_human - 0.10:.0%}", a.p_success_human - 0.10),
+                                                  (f"{a.p_success_human + 0.10:.0%}", a.p_success_human + 0.10)]),
+        ("Message success rate", "p_success_auto", [(f"{max(a.p_success_auto - 0.10, 0.0):.0%}", max(a.p_success_auto - 0.10, 0.0)),
+                                                    (f"{a.p_success_auto + 0.10:.0%}", a.p_success_auto + 0.10)]),
+        ("Sellers leaving each month", "monthly_churn", [(f"{a.monthly_churn / 2:.1%}", a.monthly_churn / 2),
+                                                         (f"{a.monthly_churn * 2:.1%}", a.monthly_churn * 2)]),
+    ]
+    rows = []
+
+    def one(label, value, s):
+        _, sel, pl = run_category(df_all, subcats, s)
+        sm = portfolio_summary(sel, pl, s)
+        rows.append({"Assumption": label, "Value": value, "Platform revenue £/mo": round(sm["revenue_month"]),
+                     "Actionable sellers": sm["actionable"], "Calls · messages": f"{sm['human']} · {sm['automated']}",
+                     f"Net contribution £ ({a.value_horizon_months:g} mo)": round(sm["net_contribution"])})
+
+    one("As set now", "", a)
+    for label, field, vals in tests:
+        for name, v in vals:
+            one(label, name, dc_replace(a, **{field: v}))
+    return pd.DataFrame(rows)
 
 
 def leakage_summary(products: pd.DataFrame, a: Settings) -> dict:
@@ -559,7 +826,8 @@ def forecast(sellers: pd.DataFrame, plays: pd.DataFrame, products: pd.DataFrame,
     ramped in over play_ramp_months from month 2. climate_commission is the category-only commission:
     today's units de-seasonalised, then x that month's season index (in-stock, correctly priced listings)."""
     rows = []
-    play_exp = float(plays["expected_month"].sum()) if not plays.empty else 0.0
+    counted = plays[plays["counted"]] if not plays.empty else plays
+    play_exp = float(counted["expected_month"].sum()) if not counted.empty else 0.0   # primary actions only
     live = products[~products["flag_out_of_stock"] & ~products["flag_price_anomaly"]]
     for t in range(1, months + 1):
         d = _add_months(start, t - 1)

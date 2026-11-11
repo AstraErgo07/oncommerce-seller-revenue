@@ -2,13 +2,12 @@
 import streamlit as st
 
 from common.text import FOOTER, VERSION
-from seller_growth.categories import CATEGORIES, ORDER, SECTION
+from seller_growth.categories import SECTION
 
 
 def seller_revenue_pages(default: bool = True) -> list:
-    return [st.Page("app_pages/seller_revenue_overview.py", title="Overview (all categories)", default=default)] + [
-        st.Page(f"app_pages/seller_revenue_{k}.py", title=CATEGORIES[k].label,
-                url_path=f"seller-revenue-{k.replace('_', '-')}") for k in ORDER]
+    return [st.Page("app_pages/seller_revenue_overview.py", title="Overview", default=default),
+            st.Page("app_pages/seller_opportunities.py", title="Seller opportunities", url_path="seller-opportunities")]
 
 
 def footer() -> None:

@@ -22,7 +22,8 @@ from seller_growth.categories import CategoryConfig  # noqa: E402
 from seller_growth.data_schema import load_csv  # noqa: E402
 from seller_growth.workings import (GRID_CALL_LABEL, GRID_GAP_LABEL, GRID_HOW_TO_READ,  # noqa: E402
                                     call_or_message_text, play_sentence, reviews_per_order_text)
-from seller_growth.revenue import (Settings, break_even_grid, break_even_stake,  # noqa: E402
+from seller_growth.workings import cost_buildup_text  # noqa: E402
+from seller_growth.revenue import (Settings, break_even_grid, break_even_stake, survival_months,  # noqa: E402
                                    calibrate_reviews_per_order, settings_hash)
 
 EXAMPLE_CSV = ROOT / "seller_growth" / "example_products.csv"
@@ -33,10 +34,10 @@ def sample_ratio_stats() -> dict:
     """Aggregates only: n, median, min and max seller reviews per order in the real calibration sample."""
     import json
     return json.loads(CALIBRATION.read_text()).get("reviews_per_order_pooled", {})
-EXAMPLE_BANNER = "Example data: method demo, not market estimates."
+EXAMPLE_BANNER = "Illustrative: synthetic data and assumptions, not OnBuy performance."
 EXAMPLE_NOTE = ("Example data, calibrated on a small sample of public OnBuy pages (Nov 2026). Replace with internal "
                 "data to use (sidebar > Data).")
-REAL, ASSUMED = "[Real, published]", "[Assumed]"
+REAL, ASSUMED = "[Published]", "[Assumption]"
 MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
 MODES = ["Example data (default)", "Internal CSV"]
 LOG_COLS = ["timestamp", "page", "seller", "product", "play", "at_stake", "route", "expected_mo", "decision", "reason",
@@ -96,13 +97,13 @@ def _reset(prefix: str) -> None:
 
 
 def settings_sidebar(cfg: CategoryConfig, df_all: pd.DataFrame) -> Settings:
-    """Every Settings field a manager may want to test, each tagged [Real, published] or [Assumed]."""
+    """Every Settings field a manager may want to test, each tagged [Published] or [Assumption]."""
     d = cfg.assumptions()
     p = f"{cfg.key}_"
     sb = st.sidebar
     sb.header("Assumptions")
-    sb.caption(f"{REAL} = OnCommerce's published prices. {ASSUMED} = an estimate; change it to test the result. "
-               "Defaults are this category's own.")
+    sb.caption(f"{REAL} = OnCommerce's published prices. {ASSUMED} = a judgement, not OnCommerce data; change it to "
+               "test the result. Defaults are this category's own.")
     sb.button("Reset to defaults", on_click=_reset, args=(p,), key=f"_reset_{cfg.key}", width="stretch")
     s = lambda name: p + name  # noqa: E731
 
@@ -170,13 +171,33 @@ def settings_sidebar(cfg: CategoryConfig, df_all: pd.DataFrame) -> Settings:
     with sb.expander("Call or message " + ASSUMED, expanded=True):
         ph = st.slider(f"{ASSUMED} Call success rate", 0.0, 1.0, d.p_success_human, 0.05, key=s("ph"))
         pa = st.slider(f"{ASSUMED} Message success rate", 0.0, 1.0, d.p_success_auto, 0.05, key=s("pa"))
-        hc = st.slider(f"{ASSUMED} Call cost (£ per seller)", 0.0, 500.0, d.human_cost, 10.0, key=s("hc"))
-        ac = st.slider(f"{ASSUMED} Message cost (£ per seller)", 0.0, 20.0, d.auto_cost, 0.5, key=s("ac"))
-        pu = st.slider(f"{ASSUMED} Sales lift from Partner features", 0.0, 0.2, d.partner_sales_uplift, 0.01, key=s("pu"))
+        st.caption("Cost of a call, built up (rough estimates, not OnCommerce data):")
+        sse = st.number_input(f"{ASSUMED} Seller Success exec, fully loaded cost a year (£)", 10000.0, 200000.0,
+                              d.sse_annual_cost, 1000.0, key=s("sse"))
+        hrs = st.number_input(f"{ASSUMED} Productive hours a year", 500.0, 2500.0, d.sse_productive_hours, 50.0,
+                              key=s("hrs"))
+        ch = st.number_input(f"{ASSUMED} Hours per completed call (prep, attempts, call, follow-up, notes)", 0.1,
+                             10.0, d.call_hours, 0.1, key=s("ch"))
+        st.caption(f"Call cost = £{sse:,.0f} ÷ {hrs:,.0f} × {ch:g} = £{sse / hrs * ch:,.2f}")
+        st.caption("Cost of an automated message per seller (rough estimates, not OnCommerce data):")
+        jb = st.number_input(f"{ASSUMED} Journey build and upkeep (£)", 0.0, 50000.0, d.journey_build_cost, 100.0,
+                             key=s("jb"))
+        jr = st.number_input(f"{ASSUMED} Sellers reached by the journey", 1.0, 100000.0, d.journey_sellers_reached,
+                             100.0, key=s("jr"))
+        sc = st.number_input(f"{ASSUMED} Sending cost per seller (£)", 0.0, 5.0, d.message_send_cost, 0.01,
+                             format="%.2f", key=s("sc"))
+        st.caption(f"Message cost = £{jb:,.0f} ÷ {jr:,.0f} + £{sc:.2f} = £{jb / jr + sc:,.2f}")
+        hor = st.slider(f"{ASSUMED} Months of value counted", 3.0, 36.0, d.value_horizon_months, 1.0, key=s("hor"))
+
+    with sb.expander("Upgrade and retention " + ASSUMED):
+        pu = st.slider(f"{ASSUMED} Sales lift from Partner features", 0.0, 0.2, d.partner_sales_uplift, 0.01, key=s("pu"),
+                       help="No public evidence. A cautious default; the seller must still be better off after the fee.")
         pru = st.slider(f"{ASSUMED} Extra lift from Professional features", 0.0, 0.2, d.pro_sales_uplift, 0.01,
                         key=s("pru"))
         cfr = st.slider(f"{ASSUMED} Cancellation risk if subscription is over this share of sales", 0.01, 0.30,
                         d.churn_fee_ratio, 0.01, key=s("cfr"))
+        arl = st.slider(f"{ASSUMED} Chance an at-risk seller cancels or downgrades without help", 0.0, 1.0,
+                        d.at_risk_loss_prob, 0.05, key=s("arl"))
 
     with sb.expander("Forecast and lifetime value " + ASSUMED):
         cm = st.slider(f"{ASSUMED} OnCommerce margin on seller revenue", 0.1, 1.0, d.contribution_margin, 0.05,
@@ -194,36 +215,64 @@ def settings_sidebar(cfg: CategoryConfig, df_all: pd.DataFrame) -> Settings:
         seller_reviews_per_order=None if abs(opr - 1 / ratio) < 1e-9 else 1 / opr,
         seller_tenure_months=ten, avg_order_value=aov, partner_orders_k=pk, boost_adoption=adopt, boost_level=lvl,
         boosted_share_of_gmv=bsh, boost_incremental_share=inc, seller_margin=mar, p_success_human=ph,
-        p_success_auto=pa, human_cost=hc, auto_cost=ac, partner_sales_uplift=pu, pro_sales_uplift=pru,
-        churn_fee_ratio=cfr, contribution_margin=cm, monthly_churn=churn, monthly_upgrade_rate=upr)
+        p_success_auto=pa, sse_annual_cost=sse, sse_productive_hours=hrs, call_hours=ch, journey_build_cost=jb,
+        journey_sellers_reached=jr, message_send_cost=sc, value_horizon_months=hor, partner_sales_uplift=pu,
+        pro_sales_uplift=pru, churn_fee_ratio=cfr, at_risk_loss_prob=arl, contribution_margin=cm, monthly_churn=churn, monthly_upgrade_rate=upr)
 
 
 # --- break-even ----------------------------------------------------------------------------------------------------
 def why_call_vs_message(a: Settings) -> None:
-    """Collapsed expander after the plays table: the plain explanation first, then the tipping point and grid."""
+    """Collapsed expander after the ranking: the plain explanation first, then costs, tipping point and grid."""
     with st.expander("Why call vs message?", expanded=False):
         break_even_panel(a)
 
 
 def break_even_panel(a: Settings) -> None:
     be = break_even_stake(a)
+    sm = survival_months(a)
     st.markdown(call_or_message_text(a))
+    st.caption(cost_buildup_text(a))
     with st.container(border=True):
         st.markdown("##### The tipping point (break-even)")
         st.markdown(
-            f"A Seller Success call is worth it when the £ at stake a month is above "
-            f"(call cost − message cost) ÷ ({a.value_horizon_months:g} months × (call success − message success)) = "
-            f"(£{a.human_cost:,.0f} − £{a.auto_cost:,.0f}) ÷ ({a.value_horizon_months:g} × "
+            "A Seller Success call is worth it when the platform revenue at stake a month is above "
+            "(call cost − message cost) ÷ (OnCommerce margin × months still trading × (call success − message "
+            f"success)) = (£{a.human_cost:,.2f} − £{a.auto_cost:,.2f}) ÷ ({a.contribution_margin:.0%} × {sm:.2f} × "
             f"({a.p_success_human:.0%} − {a.p_success_auto:.0%})) = "
             + (f"**£{be:,.2f} a month**." if be != float("inf") else "never (calls are not more successful)."))
+        st.caption(f"Months still trading: of the next {a.value_horizon_months:g} months, a seller is expected to "
+                   f"trade for {sm:.2f}, because {round(a.monthly_churn * 100, 2):g}% of sellers leave each month.")
         st.markdown(f"Tipping point, £ a month, for other call costs and success gaps (message cost "
-                    f"£{a.auto_cost:,.0f}). Rows: {GRID_CALL_LABEL.lower()}. Columns: {GRID_GAP_LABEL.lower()}.")
+                    f"£{a.auto_cost:,.2f}). Rows: {GRID_CALL_LABEL.lower()}. Columns: {GRID_GAP_LABEL.lower()}.")
         grid = break_even_grid(a).map(lambda v: f"£{v:,.0f}" if v != float("inf") else "never")
         grid = grid.reset_index().rename(columns={"index": GRID_CALL_LABEL})
         st.dataframe(grid, hide_index=True, width="content",
                      column_config={c: st.column_config.TextColumn(c, help=GRID_GAP_LABEL)
                                     for c in grid.columns[1:]})
         st.caption(GRID_HOW_TO_READ)
+
+
+ILLUSTRATIVE = "Illustrative: synthetic data and assumptions, not OnBuy performance."
+
+
+def headline_metrics(summ: dict, a: Settings, scope: str) -> None:
+    """The four headline figures, labelled as illustrative model estimates."""
+    c = st.columns(4)
+    c[0].metric("Est. platform revenue a month", f"£{summ['revenue_month']:,.0f}",
+                help=f"Subscription + commission + Boost fees from {summ['sellers']} example sellers {scope}, each "
+                     "seller counted once. Model estimate.")
+    c[1].metric("Actionable seller opportunities", f"{summ['actionable']}",
+                help="Sellers whose primary action is Recommended and expected to earn more contribution than it "
+                     "costs. One action per seller. Upgrades that need validation are not counted.")
+    c[2].metric(f"Net contribution, {a.value_horizon_months:g} months", f"£{summ['net_contribution']:,.0f}",
+                help="Sum over primary actions: expected extra platform revenue × OnCommerce margin × months still "
+                     "trading × success rate, minus the cost of each call or message. Modelled, not proven.")
+    c[3].metric("Human calls · automated journeys", f"{summ['human']} · {summ['automated']}",
+                help="Recommended route for each actionable seller.")
+    nv = summ.get("primary_needs_validation", 0)
+    st.caption("Model estimates, not measured results. Intervention costs already deducted: "
+               f"£{summ['intervention_cost']:,.0f}."
+               + (f" Not counted: {nv} seller(s) whose lead action is an upgrade that needs validation." if nv else ""))
 
 
 def play_line(play: dict, a: Settings) -> str:

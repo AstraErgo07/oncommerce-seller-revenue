@@ -2,8 +2,9 @@
 
 ## Scope
 
-Climate control on OnBuy, split into five category pages, one per category manager. Each page shows only its own
-products and sellers and has its own assumption defaults. Accepts and overrides go to one decision log for the
+Climate control on OnBuy in five categories, chosen with one category selector on the "Seller opportunities" page;
+the Overview page sums them. Each category shows only its own products and sellers and has its own assumption
+defaults. Accepts and overrides go to one decision log for the
 session, which you download as a CSV. Configuration is in `seller_growth/categories.py`, the
 calculations in `seller_growth/revenue.py`, and the shared page in `app_pages/seller_revenue_common.py`.
 
@@ -21,8 +22,9 @@ and the reason for it.
 
 ## Data
 
-Every page runs on example data, labelled on the page: "Example data, calibrated on a small sample of public OnBuy
-pages (Nov 2026). Replace with internal data to use."
+Every page runs on example data, labelled on the page: "Illustrative: synthetic data and assumptions, not OnBuy
+performance." Example sellers are separate in each category (Example Seller A under Heaters is not Example Seller A
+under Fans), so the Overview adds the categories up.
 
 Distributions calibrated against a small sample of public OnBuy product pages viewed in November 2026. No raw
 marketplace data is included.
@@ -113,9 +115,13 @@ listings have few reviews, so the badge floors drive many of the estimates.
 | Average order value | £35 | account GMV (sellers sell outside climate control) |
 | Boost adoption, level, boosted share, extra sales | per page, Plus, 30%, 50% | Boost revenue and the Boost play |
 | Seller gross margin before fees | 35% | seller payback on an upgrade or Boost |
-| Sales lift from upgrading | Partner 5%, Professional 4% | upgrade play |
-| Churn risk threshold | subscription above 5% of estimated monthly GMV, now or at list price | retention play |
-| Success rate and cost to serve | human 35% at £120 per seller, automated 15% at £2 | routing |
+| Sales lift from upgrading | Partner 2%, Professional 2% (no public evidence; deliberately cautious) | upgrade action, only if the seller is better off after commission and the extra fee |
+| Churn risk threshold | subscription above 5% of estimated monthly GMV, now or at list price | retention action |
+| Chance an at-risk seller leaves without help | 30% | retention value at risk |
+| Success rate | call 35%, message 15% | routing |
+| Call cost | £45,000 fully loaded a year ÷ 1,600 productive hours × 1.4 hours per completed call = £39.38 (rough estimate, not OnCommerce data) | routing |
+| Message cost | £1,500 journey build and upkeep ÷ 2,000 sellers reached + £0.05 to send = £0.80 (rough estimate, not OnCommerce data) | routing |
+| Value horizon and margin | 12 months, 70% OnCommerce contribution margin, 3% monthly churn (9.90 months still trading) | routing and net contribution |
 | Forecast | churn 3% a month, upgrades 2% a month, plays ramp over 3 months, no new sellers | forecast |
 | LTV | monthly revenue x 70% margin / monthly churn | LTV per seller |
 
@@ -132,14 +138,16 @@ Fans and Portable AC get no Boost plays in November.
 ## Settings, break-even and the decision log
 
 All assumptions sit in one `Settings` object (`seller_growth/revenue.py`), built from the sidebar and passed to every
-calculation; there are no global settings. Each control is tagged [Real, published] or [Assumed], and "Reset to
-defaults" puts the page back to its defaults.
+calculation; there are no global settings. Each control is tagged [Published] or [Assumption], and "Reset to
+defaults" puts the category back to its defaults. Evidence in the seller view is tagged Published, Observed in
+sample, Assumption or Model estimate.
 
-A call is worth it when the £ at stake a month is above the break-even:
-(call cost − message cost) / (12 months × (call success − message success)). At the defaults that is
-(£120 − £2) / (12 × (35% − 15%)) = £49.17 a month. Each page shows a grid of the break-even for call costs of £60,
-£120 and £240 and success gaps of 10, 20 and 30 points, and one line per play:
-"£X a month at stake, above the £Y tipping point, so call. Expected gain £Z a month." (or below it, so send the
+A call is worth it when the platform revenue at stake a month is above the break-even:
+(call cost − message cost) / (OnCommerce margin × months still trading × (call success − message success)). At the
+defaults that is (£39.38 − £0.80) / (70% × 9.90 × (35% − 15%)) = £27.83 a month. (The earlier version used
+(£120 − £2) / (12 × 20%) = £49.17, with placeholder costs and no margin or churn.) The page shows a grid of the
+break-even for call costs of £20, £40 and £80 and success gaps of 10, 20 and 30 points, and one line per action:
+"£X a month at stake, above the £Y tipping point, so call. Expected extra revenue £Z a month." (or below it, so send the
 message). A "percentage point" is the plain difference between two percentages: a call that works 35% of the time
 works 20 percentage points more often than a message that works 15% of the time.
 
@@ -149,7 +157,7 @@ with the same hash were made under the same assumptions.
 
 ## The LLM
 
-The rules decide the play, the £ at stake and the route; the person using the app decides accept or override. If an
+The rules decide the play, the £ at stake and the route; the person using the app decides approve or override. If an
 LLM is configured (`OPENAI_API_KEY`), it only drafts the message text. It is given the topic, seller, product, the
 reason in plain words, listing facts and the published fees. It is not given the route, the decision, the ranking or
 any estimated £ figure, and only the subject, message and call brief are taken from its reply. Each draft is labelled
@@ -159,9 +167,10 @@ any estimated £ figure, and only the subject, message and call brief are taken 
 
 - The example data is synthetic. It reproduces the shape of a small sample found through search, which favours
   listings that rank well. It says nothing about any real seller.
-- Seller revenue uses each seller's lifetime orders across all categories, so it describes the whole account. A seller
-  on two category pages is counted on both. Units, GMV and commission labelled with the category name cover that
-  category only.
+- Seller revenue uses each seller's lifetime orders across all categories, so it describes the whole account. Units,
+  GMV and commission labelled with the category name cover that category only.
+- Success rates, the upgrade sales lift, the chance an at-risk seller leaves and the call and message cost build-up
+  are judgement. None has been tested against OnBuy results, so every value is a model estimate, not a result.
 - OnBuy's own GMV, units, tiers, Boost spend and churn are not public.
 
 ## Earlier version

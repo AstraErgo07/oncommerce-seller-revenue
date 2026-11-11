@@ -6,8 +6,8 @@ numbers. Nothing here changes a calculation: every step re-uses the inputs and r
 tests check that the final number of each worked example matches the engine.
 
 Each step is a dict: step (what happens), working (the sum with the numbers in), result, source.
-Source labels: "Real (published fee)", "Example input" (a field on the example listing), "Assumed (slider)",
-"Worked out" (from earlier steps).
+Source labels: "Published" (a published fee), "Observed in sample" (a field on the example listing), "Assumption" (slider),
+"Model estimate" (worked out from earlier steps).
 """
 from __future__ import annotations
 
@@ -16,13 +16,16 @@ import math
 try:
     from .calc import months_since
     from .revenue import (BOOST, FIRST_SALE, LEAK_DELIVERY, LEAK_DUP, LEAK_OOS, LEAK_PRICE, RETAIN,
-                          UPGRADE, Settings, break_even_stake, season_group, subscription_for)
+                          UPGRADE, Settings, break_even_stake, contribution_factor, season_group, subscription_for,
+                          survival_months)
 except ImportError:
     from calc import months_since
     from revenue import (BOOST, FIRST_SALE, LEAK_DELIVERY, LEAK_DUP, LEAK_OOS, LEAK_PRICE, RETAIN,
-                         UPGRADE, Settings, break_even_stake, season_group, subscription_for)
+                         UPGRADE, Settings, break_even_stake, contribution_factor, season_group, subscription_for,
+                          survival_months)
 
-REAL, EXAMPLE, ASSUMED, WORKED = "Real (published fee)", "Example input", "Assumed (slider)", "Worked out"
+REAL, EXAMPLE, ASSUMED, WORKED = "Published", "Observed in sample", "Assumption", "Model estimate"
+SOURCE_TAGS = {REAL: "published by OnCommerce or a public source", EXAMPLE: "a field on the listing (here synthetic example data shaped like the public sample)", ASSUMED: "a judgement you can change in the sidebar", WORKED: "worked out by the model from the items above"}
 MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
                "November", "December"]
 
@@ -32,24 +35,39 @@ GRID_HOW_TO_READ = ("How to read the grid: pick the row for what a call costs an
                     "a call works; the cell is the £ a month at stake above which a call pays.")
 
 
+def cost_buildup_text(a: Settings) -> str:
+    """How the call and message costs are built up (rough estimates, not OnCommerce data)."""
+    return (f"Call cost (assumption, a rough estimate): £{a.sse_annual_cost:,.0f} fully loaded yearly cost of a Seller "
+            f"Success exec ÷ {a.sse_productive_hours:,.0f} productive hours a year = £{a.sse_annual_cost / a.sse_productive_hours:,.2f} "
+            f"an hour, × {a.call_hours:g} hours per completed call (prep, attempts, the call, follow-up and CRM notes) "
+            f"= £{a.human_cost:,.2f}. Message cost (assumption, a rough estimate): £{a.journey_build_cost:,.0f} to build "
+            f"and maintain the journey ÷ {a.journey_sellers_reached:,.0f} sellers reached = "
+            f"£{a.journey_build_cost / a.journey_sellers_reached:,.2f}, + £{a.message_send_cost:,.2f} to send = "
+            f"£{a.auto_cost:,.2f}. Neither is OnCommerce data.")
+
+
 def call_or_message_text(a: Settings) -> str:
     """Plain-English explanation of the call or message tipping point, with the current settings."""
     gap = a.p_success_human - a.p_success_auto
     extra = a.human_cost - a.auto_cost
     head = (f"Should someone phone this seller, or is an automated message enough? A call costs about "
-            f"£{a.human_cost:,.0f} of staff time and works about {a.p_success_human:.0%} of the time. A message costs "
-            f"about £{a.auto_cost:,.0f} and works about {a.p_success_auto:.0%} of the time. ")
+            f"£{a.human_cost:,.2f} of staff time and works about {a.p_success_human:.0%} of the time. A message costs "
+            f"about £{a.auto_cost:,.2f} and works about {a.p_success_auto:.0%} of the time. ")
     if gap <= 0:
         return head + "A call does not work more often than a message, so the message is always the better choice."
     be = break_even_stake(a)
-    return head + (f"A call works {gap * 100:.0f} percentage points more often but costs £{extra:,.0f} more, so it "
-                   f"only pays when enough money is at stake. Over {a.value_horizon_months:g} months that tipping "
-                   f"point is £{extra:,.0f} ÷ ({a.value_horizon_months:g} × {gap:.0%}) ≈ £{be:,.0f} a month. "
-                   "Above it: call. Below it: send the message.")
+    sm = survival_months(a)
+    return head + (f"A call works {gap * 100:.0f} percentage points more often but costs £{extra:,.2f} more, so it "
+                   "only pays when enough money is at stake. What counts is OnCommerce's contribution, not the "
+                   f"seller's sales: each extra £1 of platform revenue a month is worth {a.contribution_margin:.0%} "
+                   f"as contribution, for about {sm:.1f} months out of the next {a.value_horizon_months:g} (some "
+                   f"sellers leave: {round(a.monthly_churn * 100, 2):g}% a month). So the tipping point is "
+                   f"£{extra:,.2f} ÷ ({a.contribution_margin:.0%} × {sm:.1f} × {gap:.0%}) ≈ £{be:,.0f} of platform "
+                   "revenue a month. Above it: call. Below it: send the message.")
 
 
 def play_sentence(play: dict, a: Settings) -> str:
-    """One line per play: '£X a month at stake, above the £Y tipping point, so call. Expected gain £Z a month.'"""
+    """One line per play: '£X a month at stake, above the £Y tipping point, so call. Expected extra revenue £Z a month.'"""
     be = break_even_stake(a)
     stake = f"£{play['stake_month']:,.0f} a month at stake, "
     if be == float("inf"):
@@ -58,7 +76,28 @@ def play_sentence(play: dict, a: Settings) -> str:
         where = f"above the £{be:,.0f} tipping point, so call."
     else:
         where = f"below the £{be:,.0f} tipping point, so send the message."
-    return stake + where + f" Expected gain £{play['expected_month']:,.0f} a month."
+    return stake + where + f" Expected extra revenue £{play['expected_month']:,.0f} a month."
+
+
+def action_economics_steps(play: dict, a: Settings) -> list[dict]:
+    """The money behind one action, on OnCommerce contribution: stake, success, cost, revenue and net contribution."""
+    sm, f = survival_months(a), contribution_factor(a)
+    st_, p = play["stake_month"], play["p_success"]
+    return [
+        step("Platform revenue at stake a month", "extra fees and commission to OnCommerce if the action works "
+             "(not the seller's sales)", _gbp(st_, 2), WORKED),
+        step("Chance it works", f"{play['route']}: assumed success rate", f"{p:.0%}", ASSUMED),
+        step("Cost of the intervention", "call or message cost, built up in the sidebar",
+             _gbp(play["intervention_cost"], 2), ASSUMED),
+        step(f"Expected extra revenue over {a.value_horizon_months:g} months",
+             f"{_gbp(st_, 2)} × {p:.0%} × {sm:.1f} months still trading (churn {round(a.monthly_churn * 100, 2):g}% "
+             "a month)", _gbp(play["expected_revenue_horizon"]), WORKED),
+        step("Expected contribution", f"× {a.contribution_margin:.0%} OnCommerce margin", _gbp(play["expected_contribution"]),
+             WORKED),
+        step("Expected net contribution after cost", f"{_gbp(play['expected_contribution'])} − "
+             f"{_gbp(play['intervention_cost'], 2)}", _gbp(play["net_contribution"]), WORKED),
+        step("Why this route", play["why_route"], play["route"], WORKED),
+    ]
 
 
 GLOSSARY = {
@@ -240,32 +279,32 @@ def seller_value_workings(sr: dict, a: Settings, reviews_per_order: float, n_cal
                           sample: dict | None = None) -> tuple[list[dict], float, float]:
     """Steps (1) orders, (2) orders a month, (3) sales a month, (4) revenue, (5) LTV, for one seller.
     Returns (steps, revenue a month, LTV); both equal the engine's est_revenue_month and ltv."""
-    R, A, W = "Real", "Assumed", "Worked out"
+    R, A, W, O = REAL, ASSUMED, WORKED, EXAMPLE
     s = []
     life = sr["lifetime_orders"]
     src = str(sr["orders_source"])
     if src.startswith("SHOWN"):
         s.append(step("1. Lifetime orders (shown on OnBuy)",
                       f"the OnBuy seller box shows {life / 1000:g}k+ orders. The + means at least this many, so "
-                      "this is a minimum", _n(life), R))
+                      "this is a minimum", _n(life), O))
     elif src.startswith("EST"):
         per = 1 / reviews_per_order
         s.append(step("1. Lifetime orders (estimated from reviews)",
-                      f"no order count is shown, so {_n(sr['seller_reviews'])} seller reviews (real) × about "
-                      f"{per:.1f} orders per review (assumed, explained in the note on the ratio): "
+                      f"no order count is shown, so {_n(sr['seller_reviews'])} seller reviews (observed in sample) × about "
+                      f"{per:.1f} orders per review (assumption, explained in the note on the ratio): "
                       f"{_n(sr['seller_reviews'])} × {per:.1f}",
-                      _n(life), f"{R} review count × {A} ratio"))
+                      _n(life), f"{O} review count × {A} ratio"))
     else:
-        s.append(step("1. Lifetime orders", "no order count and no seller reviews shown", "0", R))
+        s.append(step("1. Lifetime orders", "no order count and no seller reviews shown", "0", O))
     om = sr["est_orders_month"]
-    s.append(step("2. Orders a month", f"lifetime orders ÷ months trading (assumed {a.seller_tenure_months:g}): "
+    s.append(step("2. Orders a month", f"lifetime orders ÷ months trading (assumption: {a.seller_tenure_months:g}): "
                   f"{_n(life)} ÷ {a.seller_tenure_months:g}", _n(om, 1), A))
     gmv = sr["est_account_gmv_month"]
-    s.append(step("3. Sales a month, whole account", f"orders a month × average order value (assumed "
+    s.append(step("3. Sales a month, whole account", f"orders a month × average order value (assumption: "
                   f"{_gbp(a.avg_order_value)}): {_n(om, 1)} × {_gbp(a.avg_order_value)}", _gbp(gmv), A))
     tier, sub = sr["tier"], sr["subscription_month"]
     if str(sr["tier_source"]).startswith("SHOWN"):
-        why, tsrc = "tier shown: the listing has the Professional Seller badge", R
+        why, tsrc = "tier shown: the listing has the Professional Seller badge", f"{R} price, {O} tier"
     elif tier == "Partner":
         why, tsrc = (f"tier estimated: no badge, and at least {a.partner_orders_k:g}k lifetime orders, so assume "
                      "Partner", f"{R} price, {A} tier")
@@ -302,17 +341,24 @@ def seller_value_workings(sr: dict, a: Settings, reviews_per_order: float, n_cal
 def play_rules(a: Settings) -> dict[str, str]:
     """One plain sentence per play: when it fires, and the £ at stake."""
     return {
-        UPGRADE: (f"Suggest the next subscription tier when the extra profit we expect it to bring the seller "
-                  f"({a.partner_sales_uplift:.0%} more sales for Partner, {a.pro_sales_uplift:.0%} for Professional, "
-                  f"at a {a.seller_margin:.0%} margin) is more than the extra monthly fee. At stake: the extra fee plus "
-                  f"commission on the extra sales."),
+        UPGRADE: (f"Suggest the next subscription tier only when the seller would be better off: extra sales from "
+                  f"the tier's features (assumption: {a.partner_sales_uplift:.0%} for Partner, {a.pro_sales_uplift:.0%} for "
+                  f"Professional; no public evidence, so cautious) × the seller's margin after commission "
+                  f"({a.seller_margin:.0%} − {a.commission_rate:.0%}) must be more than the extra monthly fee. Marked "
+                  "'Needs validation' if the tier or orders are estimated, the gain is thin, or the seller would lose "
+                  "money at the January 2028 list price. Deferred if the seller has a sales leak to fix first. At "
+                  "stake: the extra fee plus commission on the extra sales."),
         RETAIN: (f"Flag a seller whose subscription is more than {a.churn_fee_ratio:.0%} of their estimated monthly "
                  f"sales, now or after the promotional prices end in January 2028, because they may cancel or "
-                 f"downgrade. At stake: everything the seller pays OnCommerce a month."),
-        BOOST: (f"Suggest Boost for an in-stock listing in its busy season (season factor at least 1.0) that scores at "
-                f"least {a.quality_threshold}/100 for listing quality, is priced within {a.price_gap_threshold:.0%} of "
-                f"the cheapest offer, has no Bestseller badge, and where the Boost fee would pay for itself for the "
-                f"seller. At stake: Boost fees plus commission on the extra sales."),
+                 f"downgrade. At stake: what would be lost (the whole account if they cancel, the tier difference if "
+                 f"they downgrade) × the assumed {a.at_risk_loss_prob:.0%} chance of losing it without help."),
+        BOOST: (f"Suggest Boost only for an in-stock, correctly priced listing in its busy season (season factor at "
+                f"least 1.0) that scores at least {a.quality_threshold}/100 for listing quality, is not a duplicate "
+                f"page, is priced within {a.price_gap_threshold:.0%} of the cheapest offer, has no Bestseller badge, "
+                "where the Boost fee pays for itself for the seller and the platform's return covers the cost of "
+                "asking. Deferred if the seller has a sales leak to fix first. At stake: Boost fees plus commission "
+                f"on the extra sales, × {1 - a.boost_adoption:.0%} (the share of sellers not already using Boost, "
+                "whose Boost fees are already in the base revenue)."),
         FIRST_SALE: (f"Suggest a listing fix when a listing has no reviews yet or scores under "
                      f"{a.quality_threshold}/100 (missing brand, paid or slow delivery, low stock and similar). At "
                      f"stake: commission if it reached {a.first_sale_units:g} sales a month, or "
@@ -329,29 +375,26 @@ def play_rules(a: Settings) -> dict[str, str]:
 
 
 def routing_rule(a: Settings) -> str:
-    h, au = a.p_success_human, a.p_success_auto
-    yrs = a.value_horizon_months
-    diff = (h - au) * yrs
-    breakeven = (a.human_cost - a.auto_cost) / diff if diff > 0 else math.inf
-    return (f"Each play has a monthly £ at stake. A Seller Success call is assumed to work {h:.0%} of the time and "
-            f"cost {_gbp(a.human_cost)}; an automated message works {au:.0%} of the time and costs "
-            f"{_gbp(a.auto_cost, 0)}. Over {yrs:g} months, pick whichever leaves more money after its cost. With these "
-            f"settings a call is worth it when about {_gbp(breakeven)} a month or more is at stake. Expected £ a month = "
-            f"£ at stake x the success rate of the chosen route.")
+    be = break_even_stake(a)
+    return (f"Each action has a monthly platform revenue at stake. A Seller Success call is assumed to work "
+            f"{a.p_success_human:.0%} of the time and cost {_gbp(a.human_cost, 2)}; an automated message works "
+            f"{a.p_success_auto:.0%} of the time and costs {_gbp(a.auto_cost, 2)}. Value = £ at stake × "
+            f"{a.contribution_margin:.0%} OnCommerce margin × {survival_months(a):.1f} months still trading × success "
+            f"rate, minus the cost. The route that leaves more contribution wins: a call when about {_gbp(be)} a month "
+            "or more is at stake.")
 
 
 def routing_workings(play: dict, a: Settings) -> list[dict]:
     st_ = play["stake_month"]
-    y = a.value_horizon_months
+    f = contribution_factor(a)
     return [
-        step("£ at stake a month", "from the play rule", _gbp(st_, 2), WORKED),
-        step("Call from Seller Success", f"{_gbp(st_, 2)} x {y:g} months x {a.p_success_human:.0%} success - "
-             f"{_gbp(a.human_cost)} cost", _gbp(play["net_value_human"]), ASSUMED),
-        step("Automated message", f"{_gbp(st_, 2)} x {y:g} months x {a.p_success_auto:.0%} success - "
-             f"{_gbp(a.auto_cost)} cost", _gbp(play["net_value_auto"]), ASSUMED),
+        step("£ at stake a month", "platform revenue from the action rule", _gbp(st_, 2), WORKED),
+        step("Call from Seller Success", f"{_gbp(st_, 2)} × {f:.2f} (margin × months still trading) × "
+             f"{a.p_success_human:.0%} success − {_gbp(a.human_cost, 2)} cost", _gbp(play["net_value_human"]), ASSUMED),
+        step("Automated message", f"{_gbp(st_, 2)} × {f:.2f} × {a.p_success_auto:.0%} success − "
+             f"{_gbp(a.auto_cost, 2)} cost", _gbp(play["net_value_auto"]), ASSUMED),
         step("Route", "the larger of the two", play["route"], WORKED),
-        step("Expected £ a month", f"{_gbp(st_, 2)} x {(a.p_success_human if 'Human' in play['route'] else a.p_success_auto):.0%}",
-             _gbp(play["expected_month"], 2), WORKED),
+        step("Expected £ a month", f"{_gbp(st_, 2)} × {play['p_success']:.0%}", _gbp(play["expected_month"], 2), WORKED),
     ]
 
 
@@ -389,3 +432,79 @@ RULE_PLAIN = {
 
 def plain_rule(code: str) -> str:
     return RULE_PLAIN.get(code, code.replace("_", " "))
+
+
+# --- seller decision view, in business language -----------------------------------------------------------------
+_EST_KEYS = ("est_", "units", "gmv", "gain", "net", "roi", "breakeven", "fee_to_sales", "season_index", "lifetime")
+_PUB_KEYS = ("extra_fee", "subscription", "next_tier_features", "list_price", "suggested_boost_level")
+_ASM_KEYS = ("assumed", "chance", "next_tier")
+
+
+def evidence_source(key: str) -> str:
+    k = key.lower()
+    if any(w in k for w in _PUB_KEYS):
+        return REAL
+    if any(w in k for w in _ASM_KEYS):
+        return ASSUMED
+    if any(w in k for w in _EST_KEYS):
+        return WORKED
+    return EXAMPLE
+
+
+def evidence_rows(ev: dict) -> list[dict]:
+    """Evidence as rows tagged Published / Observed in sample / Assumption / Model estimate."""
+    rows = []
+    for k_, v in ev.items():
+        label = k_.replace("_gbp", " (£)").replace("season_index", "season_factor").replace("_", " ")
+        rows.append({"Item": label[:1].upper() + label[1:], "Value": str(round(v, 2) if isinstance(v, float) else v),
+                     "Type": evidence_source(k_)})
+    return rows
+
+
+ACTION_WORDS = {
+    UPGRADE: "Talk to the seller about moving to {next_tier}, only if their own numbers show it pays for itself",
+    RETAIN: "Check in with the seller before they cancel or downgrade, and help them get more from their plan",
+    BOOST: "Offer Boost on {product} at the {boost} level, now that the listing is ready for it",
+    FIRST_SALE: "Help the seller improve {product} so it starts selling or sells more",
+    LEAK_OOS: "Ask the seller to restock {product}: it is out of stock in its selling season",
+    LEAK_DUP: "Merge the duplicate pages for {product} so sales and reviews are not split",
+    LEAK_DELIVERY: "Help the seller offer free or faster delivery on {product}",
+    LEAK_PRICE: "Ask the seller to check the price on {product}: it looks wrong",
+}
+
+
+def action_text(play: dict) -> str:
+    ev = play.get("evidence", {})
+    return ACTION_WORDS[play["play_type"]].format(
+        next_tier=ev.get("next_tier", "the next tier"), product=play.get("title") or "this listing",
+        boost=str(ev.get("suggested_boost_level", "")).split(" ")[0] or "suggested")
+
+
+def seller_situation(seller: dict | None, seller_products: list[dict], seller_plays: list[dict]) -> str:
+    """Two or three sentences on what is happening commercially for a seller."""
+    parts = []
+    if seller:
+        parts.append(
+            f"{seller['seller']} is on the {seller['tier']} plan ({'shown' if str(seller['tier_source']).startswith('SHOWN') else 'estimated'})"
+            f" and is estimated to pay OnCommerce about £{seller['est_revenue_month']:,.0f} a month across its whole "
+            f"account. In this category it sells about {seller['climate_units_month']:,.1f} units a month "
+            f"(£{seller['climate_gmv_month']:,.0f} of sales, model estimate).")
+    n = len(seller_products)
+    oos = sum(1 for p in seller_products if p.get("flag_out_of_stock"))
+    low_q = sum(1 for p in seller_products if not p.get("flag_out_of_stock") and p.get("quality_issues"))
+    if n:
+        bits = [f"{n} listing{'s' if n != 1 else ''} here as the recommended offer"]
+        if oos:
+            bits.append(f"{oos} out of stock")
+        if low_q:
+            bits.append(f"{low_q} with listing issues")
+        parts.append("It has " + ", ".join(bits) + ".")
+    types = {p["play_type"] for p in seller_plays}
+    if types & {LEAK_OOS, LEAK_DELIVERY, LEAK_DUP, LEAK_PRICE, FIRST_SALE}:
+        parts.append("It is losing sales to problems that can be fixed, so fixing them comes before advertising or a "
+                     "plan change.")
+    elif RETAIN in types:
+        parts.append("Its subscription looks high next to its sales, so there is a risk it cancels or downgrades.")
+    elif types & {BOOST, UPGRADE}:
+        parts.append("Its listings are in good shape, so there may be room to grow with Boost or a better plan.")
+    return " ".join(parts)

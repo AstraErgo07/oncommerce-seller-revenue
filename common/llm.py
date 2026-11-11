@@ -27,7 +27,7 @@ def call_llm(prompt: str) -> str:
     """Send prompt to the LLM and return its raw text reply."""
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
-        raise LLMUnavailable("No OPENAI_API_KEY set - using rules-based explanation")
+        raise LLMUnavailable("No OPENAI_API_KEY set, so the rules wrote this draft")
     base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     model = os.environ.get("AGENT_MODEL", "gpt-4o-mini")
     body = {

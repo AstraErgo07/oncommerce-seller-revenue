@@ -69,23 +69,32 @@ class TestSellerRevenue(unittest.TestCase):
 
     def test_3_plays_routes_and_boost_roi(self):
         a = Settings()
-        # route: stake £100/mo -> human 100x12x0.35-120 = 300 ; auto 100x12x0.15-2 = 178 -> human
+        # contribution per £1/month = 70% margin x 9.899 months still trading (12 months, 3% churn) = 6.929
+        f = 0.70 * sum(0.97 ** t for t in range(1, 13))
+        # route: stake £100/mo -> call 100 x 6.929 x 0.35 - 39.375 = 203.15 ; message 100 x 6.929 x 0.15 - 0.80
         route, vh, va, exp = route_play(100.0, a)
         self.assertEqual(route, HUMAN)
-        self.assertAlmostEqual(vh, 300.0)
-        self.assertAlmostEqual(va, 178.0)
+        self.assertAlmostEqual(vh, 100 * f * 0.35 - 39.375)
+        self.assertAlmostEqual(round(vh, 2), 203.15)
+        self.assertAlmostEqual(va, 100 * f * 0.15 - 0.80)
         self.assertAlmostEqual(exp, 35.0)
-        # stake £20/mo -> human 84-120 = -36 ; auto 36-2 = 34 -> automated
+        # stake £20/mo -> call 48.50 - 39.38 = 9.13 ; message 20.79 - 0.80 = 19.99 -> automated
         self.assertEqual(route_play(20.0, a)[0], AUTOMATED)
         # Boost ROI for the seller: 0.5 x (0.35-0.15) / (1.5 x 0.05) = 1.33 at Light; 0.67 at Plus -> Light
         self.assertAlmostEqual(boost_seller_roi(0.05, a, 0.15), 0.1 / 0.075)
         self.assertEqual(best_boost_level(a, 0.15), "Light")
-        # upgrade: Standard seller with £10,000 GMV: 5% lift x 35% margin = £175 > £44 extra fee -> upgrade
-        up = upgrade_case({"tier": "Standard", "est_account_gmv_month": 10000.0}, a)
+        # upgrade: Standard seller with £40,000 GMV: 2% lift = £800 extra sales x (35% margin - 15% commission)
+        # = £160 extra profit - £44 extra fee = £116 better off (and £56 at the £104 list-price step) -> upgrade
+        up = upgrade_case({"tier": "Standard", "est_account_gmv_month": 40000.0, "tier_source": "SHOWN",
+                           "orders_source": "SHOWN"}, a)
         self.assertEqual(up["next_tier"], "Partner")
         self.assertAlmostEqual(up["fee_delta"], 44.0)
-        self.assertAlmostEqual(up["stake"], 44.0 + 10000 * 0.05 * 0.15)
-        self.assertIsNone(upgrade_case({"tier": "Standard", "est_account_gmv_month": 2000.0}, a))  # £35 < £44
+        self.assertAlmostEqual(up["seller_net"], 116.0)
+        self.assertAlmostEqual(up["seller_net_list"], 56.0)
+        self.assertFalse(up["needs_validation"])
+        self.assertAlmostEqual(up["stake"], 44.0 + 40000 * 0.02 * 0.15)
+        # £10,000 GMV: £200 x 20% = £40 < £44 extra fee -> the seller is not better off, no upgrade
+        self.assertIsNone(upgrade_case({"tier": "Standard", "est_account_gmv_month": 10000.0}, a))
         # Professional seller with small GMV -> retention play; out-of-stock heater -> leakage play
         df = pd.DataFrame([
             product(seller="Pro", offer_sellers="Pro", seller_professional=True, seller_orders_k=0.534),
@@ -99,7 +108,8 @@ class TestSellerRevenue(unittest.TestCase):
         # lost units = Bestseller floor 10/month in season; commission 15% x £20 = £3 -> £30/month
         self.assertAlmostEqual(oos["stake_month"], 30.0)
         self.assertNotIn(UPGRADE, set(plays["play_type"]))
-        self.assertIn(BOOST, set(plays["play_type"]))   # in-season, good listing, no Bestseller badge
+        # in-season, good listing, but about 0.5 units a month: Boost would not repay even a £0.80 message
+        self.assertNotIn(BOOST, set(plays["play_type"]))
 
     def test_4_forecast(self):
         a = Settings(monthly_churn=0.10, monthly_upgrade_rate=0.0)

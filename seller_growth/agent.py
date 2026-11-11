@@ -32,7 +32,8 @@ LLM_KEYS = ["subject", "message", "call_brief"]          # all the LLM may retur
 DRAFT_KEYS = LLM_KEYS + ["confidence", "additional_data"]
 # evidence keys never shown to the LLM: estimates, £ at stake, route, decision and ranking
 BLOCKED_WORDS = ("route", "decision", "rank", "stake", "expected", "net_value", "est_", "gmv", "revenue", "gain",
-                 "roi", "breakeven", "fee_to_sales", "units", "lifetime_orders", "orders_source", "season")
+                 "roi", "breakeven", "fee_to_sales", "units", "lifetime_orders", "orders_source", "season",
+                 "assumed", "validation", "chance", "confidence", "status", "net")
 
 
 def llm_facts(play: dict, a: Settings) -> dict:
@@ -77,13 +78,16 @@ def rules_outreach(play: dict, a: Settings) -> dict:
     if t == UPGRADE:
         nxt = ev["next_tier"]
         subj = f"{s}: what {nxt} would add to your OnBuy store"
-        msg = (f"Hi {s} team, based on your order history on OnBuy, {nxt} could pay for itself. For "
-               f"£{ev['extra_fee_month_gbp']:.0f}/month more (promo price until Jan 2028) you get: "
-               f"{ev['next_tier_features'].lstrip('+ ')}. Want us to switch it on, or to talk it through first?")
+        msg = (f"Hi {s} team, we'd like to check whether {nxt} would be worth it for you. For "
+               f"£{ev['extra_fee_month_gbp']:.0f}/month more (promo price until Jan 2028, then "
+               f"£{ev['extra_fee_after_jan_2028_gbp']:.0f}) you get: {ev['next_tier_features'].lstrip('+ ')}. Could we "
+               "look at your sales and margins together to see whether those features would pay for themselves?")
         brief = (f"Tier: {ev['tier']} ({ev['tier_source']}). Lifetime orders {ev['lifetime_orders']:,} ({ev['orders_source']}).\n"
-                 f"Est. account GMV £{ev['est_account_gmv_month_gbp']:,}/mo (estimate); est. seller gain "
-                 f"£{ev['est_seller_gain_month_gbp']:,.0f}/mo vs £{ev['extra_fee_month_gbp']:.0f} extra fee.\n"
-                 f"Confirm current tier and real GMV first; lead with the new-tier features that fit their top lines.")
+                 f"Est. account GMV £{ev['est_account_gmv_month_gbp']:,}/mo (estimate); assumed "
+                 f"{ev['assumed_sales_lift']:.0%} sales lift gives the seller about £{ev['est_seller_gain_month_gbp']:,.0f}/mo "
+                 f"extra profit vs £{ev['extra_fee_month_gbp']:.0f} extra fee (net £{ev['est_seller_net_month_gbp']:,.0f}; "
+                 f"£{ev['est_seller_net_after_jan_2028_gbp']:,.0f} at list price).\n"
+                 f"Validation needed: {ev['validation_reasons']}. Confirm tier, real GMV and margin before recommending.")
         more = "Seller's actual tier, monthly GMV and margin; conversion lift seen by sellers who upgraded."
     elif t == RETAIN:
         subj = f"{s}: getting more from your OnBuy plan"
@@ -131,7 +135,7 @@ def rules_outreach(play: dict, a: Settings) -> dict:
     elif t == LEAK_DELIVERY:
         subj = f"Delivery on '{prod}'"
         msg = (f"Hi {s} team, '{prod}' shows paid or slow delivery (fee £{ev.get('delivery_fee_gbp') or 0:.2f}, up to "
-               f"{ev.get('delivery_max_days')} days). Free delivery within a week converts better on OnBuy - can you match it?")
+               f"{ev.get('delivery_max_days')} days). Could you offer free delivery within a week? Buyers tend to compare delivery terms.")
         brief, more = "n/a", "Dispatch location and on-time rate."
     else:  # LEAK_PRICE
         subj = f"Please check the price on '{prod}'"
