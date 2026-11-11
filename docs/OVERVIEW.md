@@ -8,6 +8,305 @@ Portfolio project. Made by Ami Sata.
 
 A decision-support prototype for OnBuy (part of OnCommerce) category managers in climate control, one page per category manager (Heaters, Fans, Dehumidifiers, Portable AC, Air Purifiers). For each listing: estimated units, average selling price and GMV. For each seller: what they are worth to OnCommerce a month and the next action, with a choice between a Seller Success call and an automated message. The calculations are plain Python rules. A person accepts or overrides every recommendation, and every decision is logged. An LLM is optional and only drafts message text.
 
+## Seller Revenue: headline numbers on the example data
+
+Example data: method demo, not market estimates. Calibrated on a small sample of public OnBuy pages (Nov 2026); replace with internal data to use. Page defaults, November 2026. The sellers are synthetic, so these numbers show how the method behaves, not the size of any OnBuy category.
+
+| Category | Example products | Example sellers | Est. units/month (Nov) | Avg selling price per unit (£) | Est. GMV/month (£) | Commission/month (£) | Revenue to OnCommerce/month (£) | Plays | Top play |
+|---|---|---|---|---|---|---|---|---|---|
+| Heaters | 20 | 10 | 287 | 37.61 | 10,798 | 1,588 | 30,234 | 33 | Upgrade subscription, Example Seller A |
+| Fans | 20 | 23 | 125 | 60.50 | 7,562 | 1,126 | 43,484 | 35 | Upgrade subscription, Example Seller J |
+| Dehumidifiers | 20 | 13 | 233 | 74.33 | 17,301 | 2,563 | 79,461 | 47 | Upgrade subscription, Example Seller K |
+| Portable AC | 20 | 10 | 8 | 40.33 | 302 | 45 | 3,664 | 40 | Retention / downgrade risk, Example Seller D |
+| Air Purifiers | 20 | 18 | 117 | 118.65 | 13,933 | 2,021 | 29,433 | 48 | Upgrade subscription, Example Seller AD |
+
+Revenue to OnCommerce counts each seller's whole account (all categories), so it is larger than the category commission and does not add up across categories.
+
+## Sample output for each category (example data, page defaults)
+
+### Heaters
+
+Subcategories: fan heaters, oil filled radiators, convector heaters. Season pattern: heating. Totals: 287 units x £37.61 average price = £10,798 GMV this month.
+
+Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
+
+| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
+|---|---|---|---|---|---|---|---|---|
+| Example Seller A | 45.2 | 39.00 | 1,761 | Partner | 69 | 8,355 | 418 | 8,842 |
+| Example Seller E | 9.6 | 41.61 | 398 | Partner | 69 | 4,768 | 238 | 5,076 |
+| Example Seller D | 33.5 | 34.01 | 1,139 | Partner | 69 | 3,573 | 179 | 3,821 |
+| Example Seller J | 23.7 | 41.74 | 990 | Partner | 69 | 2,990 | 149 | 3,208 |
+| Example Seller I | 17.5 | 28.64 | 501 | Partner | 69 | 2,958 | 148 | 3,175 |
+| Example Seller G | 78.8 | 31.22 | 2,462 | Partner | 69 | 2,363 | 118 | 2,550 |
+| Example Seller F | 11.7 | 50.07 | 584 | Standard | 25 | 875 | 44 | 944 |
+| Example Seller B | 10.0 | 44.02 | 440 | Standard | 25 | 875 | 44 | 944 |
+| Example Seller H | 24.2 | 44.08 | 1,066 | Standard | 25 | 800 | 40 | 865 |
+| Example Seller C | 33.0 | 44.21 | 1,457 | Standard | 25 | 747 | 37 | 810 |
+
+Top plays:
+
+| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
+|---|---|---|---|---|---|---|---|
+| 1 | Upgrade subscription | Example Seller A | (whole account) | extra sales would pay for the next tier | 514 | Human (Seller Success) | 180 |
+| 2 | Upgrade subscription | Example Seller E | (whole account) | extra sales would pay for the next tier | 371 | Human (Seller Success) | 130 |
+| 3 | Upgrade subscription | Example Seller D | (whole account) | extra sales would pay for the next tier | 323 | Human (Seller Success) | 113 |
+| 4 | Upgrade subscription | Example Seller J | (whole account) | extra sales would pay for the next tier | 300 | Human (Seller Success) | 105 |
+| 5 | Upgrade subscription | Example Seller I | (whole account) | extra sales would pay for the next tier | 298 | Human (Seller Success) | 104 |
+| 6 | Upgrade subscription | Example Seller G | (whole account) | extra sales would pay for the next tier | 274 | Human (Seller Success) | 96 |
+| 7 | Boost adoption | Example Seller G | Example convector heater 07 | good listing, in season, Boost pays for itself | 138 | Human (Seller Success) | 48 |
+| 8 | Upgrade subscription | Example Seller F | (whole account) | extra sales would pay for the next tier | 88 | Human (Seller Success) | 31 |
+| 9 | Upgrade subscription | Example Seller B | (whole account) | extra sales would pay for the next tier | 88 | Human (Seller Success) | 31 |
+| 10 | Upgrade subscription | Example Seller H | (whole account) | extra sales would pay for the next tier | 84 | Human (Seller Success) | 29 |
+
+33 plays in total: 13 calls, 20 automated. One row per seller: 10 sellers have a next best play.
+
+Top 10 products by estimated units:
+
+| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
+|---|---|---|---|---|---|---|---|
+| Example convector heater 07 | Example Seller G | 7 | none | yes | 98.6 | 33.34 | 3,286 |
+| Example oil filled radiator 04 | Example Seller A | 3 | Hot | yes | 41.2 | 38.86 | 1,599 |
+| Example oil filled radiator 11 | Example Seller H | 2 | none | yes | 23.7 | 44.21 | 1,047 |
+| Example fan heater 20 | Example Seller I | 1 | Bestseller | yes | 17.5 | 28.64 | 501 |
+| Example fan heater 08 | Example Seller C | 1 | none | yes | 16.2 | 65.38 | 1,061 |
+| Example convector heater 15 | Example Seller D | 4 | Bestseller | yes | 15.9 | 31.33 | 499 |
+| Example convector heater 05 | Example Seller D | 3 | Bestseller | yes | 14.6 | 34.49 | 502 |
+| Example convector heater 02 | Example Seller F | 1 | Bestseller | yes | 11.7 | 50.07 | 584 |
+| Example oil filled radiator 17 | Example Seller B | 3 | Bestseller | yes | 10.0 | 44.02 | 440 |
+| Example fan heater 13 | Example Seller C | 0 | Bestseller | yes | 10.0 | 23.61 | 236 |
+
+### Fans
+
+Subcategories: tower fans, pedestal fans, desk fans. Season pattern: cooling. Totals: 125 units x £60.50 average price = £7,562 GMV this month.
+
+Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
+
+| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
+|---|---|---|---|---|---|---|---|---|
+| Example Seller J | 0.3 | 74.73 | 22 | Partner | 69 | 6,084 | 122 | 6,275 |
+| Example Seller M | 0.3 | 152.58 | 46 | Partner | 69 | 4,261 | 85 | 4,415 |
+| Example Seller A | 46.5 | 62.31 | 2,897 | Partner | 69 | 3,979 | 80 | 4,128 |
+| Example Seller C | 11.8 | 58.11 | 685 | Partner | 69 | 3,516 | 70 | 3,655 |
+| Example Seller X | 10.0 | 53.22 | 533 | Partner | 69 | 3,049 | 61 | 3,179 |
+| Example Seller T | 0.8 | 51.82 | 41 | Partner | 69 | 2,729 | 55 | 2,853 |
+| Example Seller Z | 1.1 | 48.92 | 53 | Partner | 69 | 2,213 | 44 | 2,327 |
+| Example Seller V | 3.0 | 28.90 | 87 | Partner | 69 | 1,896 | 38 | 2,003 |
+| Example Seller D | 4.7 | 44.63 | 212 | Partner | 69 | 1,750 | 35 | 1,854 |
+| Example Seller Y | 2.4 | 60.76 | 146 | Partner | 69 | 1,680 | 34 | 1,782 |
+
+Top plays:
+
+| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
+|---|---|---|---|---|---|---|---|
+| 1 | Upgrade subscription | Example Seller J | (whole account) | extra sales would pay for the next tier | 423 | Human (Seller Success) | 148 |
+| 2 | Upgrade subscription | Example Seller M | (whole account) | extra sales would pay for the next tier | 350 | Human (Seller Success) | 123 |
+| 3 | Upgrade subscription | Example Seller A | (whole account) | extra sales would pay for the next tier | 339 | Human (Seller Success) | 119 |
+| 4 | Upgrade subscription | Example Seller C | (whole account) | extra sales would pay for the next tier | 321 | Human (Seller Success) | 112 |
+| 5 | Upgrade subscription | Example Seller X | (whole account) | extra sales would pay for the next tier | 302 | Human (Seller Success) | 106 |
+| 6 | Upgrade subscription | Example Seller T | (whole account) | extra sales would pay for the next tier | 289 | Human (Seller Success) | 101 |
+| 7 | Upgrade subscription | Example Seller Z | (whole account) | extra sales would pay for the next tier | 268 | Human (Seller Success) | 94 |
+| 8 | Upgrade subscription | Example Seller N | (whole account) | extra sales would pay for the next tier | 113 | Human (Seller Success) | 40 |
+| 9 | Upgrade subscription | Example Seller O | (whole account) | extra sales would pay for the next tier | 106 | Human (Seller Success) | 37 |
+| 10 | Upgrade subscription | Example Seller H | (whole account) | extra sales would pay for the next tier | 105 | Human (Seller Success) | 37 |
+
+35 plays in total: 16 calls, 19 automated. One row per seller: 21 sellers have a next best play.
+
+Top 10 products by estimated units:
+
+| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
+|---|---|---|---|---|---|---|---|
+| Example tower fan 11 | Example Seller A | 11 | In demand | yes | 13.5 | 88.68 | 1,197 |
+| Example pedestal fan 07 | Example Seller H | 19 | In demand | yes | 11.9 | 62.42 | 741 |
+| Example pedestal fan 06 | Example Seller A | 10 | Bestseller | yes | 10.0 | 50.89 | 509 |
+| Example tower fan 04 | Example Seller A | 0 | Bestseller | yes | 10.0 | 47.22 | 472 |
+| Example pedestal fan 17 | Example Seller A | 9 | Bestseller | yes | 10.0 | 26.39 | 264 |
+| Example tower fan 15 | Example Seller A | 13 | In demand | yes | 8.1 | 98.70 | 802 |
+| Example desk fan 08 | Example Seller C | 17 | In demand | yes | 8.1 | 61.97 | 503 |
+| Example pedestal fan 16 | Example Seller X | 5 | none | yes | 7.6 | 46.80 | 356 |
+| Example tower fan 14 | Example Seller W | 5 | In demand | yes | 7.5 | 61.66 | 463 |
+| Example desk fan 19 | Example Seller O | 13 | In demand | yes | 6.2 | 41.11 | 253 |
+
+### Dehumidifiers
+
+Subcategories: dehumidifiers. Season pattern: damp. Totals: 233 units x £74.33 average price = £17,301 GMV this month.
+
+Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
+
+| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
+|---|---|---|---|---|---|---|---|---|
+| Example Seller K | 1.0 | 107.34 | 104 | Partner | 69 | 20,635 | 825 | 21,530 |
+| Example Seller D | 1.7 | 122.12 | 213 | Partner | 69 | 10,460 | 418 | 10,948 |
+| Example Seller H | 14.6 | 93.88 | 1,369 | Partner | 69 | 9,771 | 391 | 10,231 |
+| Example Seller C | 133.0 | 54.66 | 7,269 | Partner | 69 | 7,802 | 312 | 8,183 |
+| Example Seller N | 1.7 | 118.36 | 206 | Partner | 69 | 7,134 | 285 | 7,488 |
+| Example Seller A | 30.1 | 91.88 | 2,769 | Partner | 69 | 6,781 | 271 | 7,122 |
+| Example Seller Q | 0.1 | 174.92 | 17 | Partner | 69 | 4,508 | 180 | 4,757 |
+| Example Seller L | 10.9 | 161.18 | 1,756 | Partner | 69 | 2,692 | 108 | 2,868 |
+| Example Seller E | 3.0 | 182.58 | 548 | Partner | 69 | 2,244 | 90 | 2,403 |
+| Example Seller T | 12.3 | 70.88 | 870 | Partner | 69 | 1,969 | 79 | 2,116 |
+
+Top plays:
+
+| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
+|---|---|---|---|---|---|---|---|
+| 1 | Upgrade subscription | Example Seller K | (whole account) | extra sales would pay for the next tier | 1,005 | Human (Seller Success) | 352 |
+| 2 | Upgrade subscription | Example Seller D | (whole account) | extra sales would pay for the next tier | 598 | Human (Seller Success) | 209 |
+| 3 | Upgrade subscription | Example Seller H | (whole account) | extra sales would pay for the next tier | 571 | Human (Seller Success) | 200 |
+| 4 | Upgrade subscription | Example Seller C | (whole account) | extra sales would pay for the next tier | 492 | Human (Seller Success) | 172 |
+| 5 | Upgrade subscription | Example Seller N | (whole account) | extra sales would pay for the next tier | 465 | Human (Seller Success) | 163 |
+| 6 | Upgrade subscription | Example Seller A | (whole account) | extra sales would pay for the next tier | 451 | Human (Seller Success) | 158 |
+| 7 | Upgrade subscription | Example Seller Q | (whole account) | extra sales would pay for the next tier | 360 | Human (Seller Success) | 126 |
+| 8 | Boost adoption | Example Seller C | Example dehumidifier 17 | good listing, in season, Boost pays for itself | 307 | Human (Seller Success) | 107 |
+| 9 | Upgrade subscription | Example Seller L | (whole account) | extra sales would pay for the next tier | 288 | Human (Seller Success) | 101 |
+| 10 | Upgrade subscription | Example Seller E | (whole account) | extra sales would pay for the next tier | 270 | Human (Seller Success) | 94 |
+
+47 plays in total: 17 calls, 30 automated. One row per seller: 13 sellers have a next best play.
+
+Top 10 products by estimated units:
+
+| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
+|---|---|---|---|---|---|---|---|
+| Example dehumidifier 17 | Example Seller C | 28 | none | yes | 130.0 | 52.42 | 6,814 |
+| Example dehumidifier 07 | Example Seller A | 5 | In demand | yes | 17.4 | 85.22 | 1,486 |
+| Example dehumidifier 09 | Example Seller H | 5 | none | yes | 14.6 | 93.88 | 1,369 |
+| Example dehumidifier 12 | Example Seller B | 4 | In demand | yes | 11.0 | 93.90 | 1,031 |
+| Example dehumidifier 19 | Example Seller L | 1 | Bestseller | yes | 10.0 | 165.31 | 1,653 |
+| Example dehumidifier 15 | Example Seller T | 2 | Bestseller | yes | 10.0 | 75.31 | 753 |
+| Example dehumidifier 01 | Example Seller A | 3 | Hot | yes | 8.7 | 107.03 | 935 |
+| Example dehumidifier 14 | Example Seller B | 7 | In demand | yes | 5.7 | 70.47 | 399 |
+| Example dehumidifier 05 | Example Seller A | 0 | Hot | yes | 5.0 | 93.79 | 469 |
+| Example dehumidifier 11 | Example Seller B | 7 | In demand | yes | 4.5 | 84.90 | 381 |
+
+### Portable AC
+
+Subcategories: air conditioners. Season pattern: cooling. Totals: 8 units x £40.33 average price = £302 GMV this month.
+
+Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
+
+| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
+|---|---|---|---|---|---|---|---|---|
+| Example Seller K | 0.4 | 95.20 | 38 | Standard | 25 | 794 | 16 | 834 |
+| Example Seller D | 1.5 | 38.03 | 57 | Professional | 249 | 556 | 11 | 816 |
+| Example Seller A | 1.9 | 21.52 | 41 | Professional | 249 | 443 | 9 | 701 |
+| Example Seller C | 0.0 | 824.35 | 0 | Standard | 25 | 410 | 8 | 443 |
+| Example Seller B | 1.6 | 45.79 | 73 | Standard | 25 | 196 | 4 | 225 |
+| Example Seller G | 0.0 | 412.22 | 0 | Standard | 25 | 141 | 3 | 169 |
+| Example Seller E | 0.5 | 38.39 | 19 | Standard | 25 | 106 | 2 | 133 |
+| Example Seller J | 0.5 | 19.61 | 10 | Standard | 25 | 104 | 2 | 131 |
+| Example Seller L | 0.6 | 27.65 | 17 | Standard | 25 | 95 | 2 | 122 |
+| Example Seller I | 0.5 | 95.20 | 48 | Standard | 25 | 64 | 1 | 90 |
+
+Top plays:
+
+| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
+|---|---|---|---|---|---|---|---|
+| 1 | Retention / downgrade risk | Example Seller D | (whole account) | subscription is a high share of sales | 816 | Human (Seller Success) | 286 |
+| 2 | Retention / downgrade risk | Example Seller A | (whole account) | subscription is a high share of sales | 701 | Human (Seller Success) | 245 |
+| 3 | Retention / downgrade risk | Example Seller I | (whole account) | subscription is a high share of sales | 90 | Human (Seller Success) | 32 |
+| 4 | Upgrade subscription | Example Seller K | (whole account) | extra sales would pay for the next tier | 84 | Human (Seller Success) | 29 |
+| 5 | Upgrade subscription | Example Seller C | (whole account) | extra sales would pay for the next tier | 64 | Human (Seller Success) | 23 |
+| 6 | Listing fix to unlock sales | Example Seller K | Example air conditioner 14 | no reviews yet | 22 | Automated journey | 3 |
+| 7 | Listing fix to unlock sales | Example Seller I | Example air conditioner 15 | no reviews yet | 22 | Automated journey | 3 |
+| 8 | Listing fix to unlock sales | Example Seller B | Example air conditioner 18 | no reviews yet | 14 | Automated journey | 2 |
+| 9 | Listing fix to unlock sales | Example Seller D | Example air conditioner 16 | no reviews yet | 11 | Automated journey | 2 |
+| 10 | Listing fix to unlock sales | Example Seller D | Example air conditioner 06 | no reviews yet | 10 | Automated journey | 2 |
+
+40 plays in total: 5 calls, 35 automated. One row per seller: 10 sellers have a next best play.
+
+Top 10 products by estimated units:
+
+| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
+|---|---|---|---|---|---|---|---|
+| Example air conditioner 14 | Example Seller K | 0 | none | yes | 0.5 | 100.33 | 50 |
+| Example air conditioner 15 | Example Seller I | 0 | none | yes | 0.5 | 95.20 | 48 |
+| Example air conditioner 18 | Example Seller B | 0 | none | yes | 0.5 | 58.46 | 29 |
+| Example air conditioner 16 | Example Seller D | 0 | none | yes | 0.5 | 45.77 | 23 |
+| Example air conditioner 06 | Example Seller D | 0 | none | yes | 0.5 | 44.67 | 22 |
+| Example air conditioner 04 | Example Seller B | 0 | none | yes | 0.5 | 40.69 | 20 |
+| Example air conditioner 11 | Example Seller E | 0 | none | yes | 0.5 | 38.39 | 19 |
+| Example air conditioner 09 | Example Seller L | 0 | none | yes | 0.5 | 29.76 | 15 |
+| Example air conditioner 17 | Example Seller A | 0 | none | yes | 0.5 | 28.47 | 14 |
+| Example air conditioner 13 | Example Seller D | 0 | none | yes | 0.5 | 23.64 | 12 |
+
+### Air Purifiers
+
+Subcategories: air purifiers. Season pattern: all-year. Totals: 117 units x £118.65 average price = £13,933 GMV this month.
+
+Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
+
+| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
+|---|---|---|---|---|---|---|---|---|
+| Example Seller AD | 3.1 | 165.11 | 512 | Partner | 69 | 15,078 | 452 | 15,600 |
+| Example Seller M | 30.5 | 37.62 | 1,149 | Partner | 69 | 3,532 | 106 | 3,706 |
+| Example Seller I | 1.5 | 120.94 | 185 | Partner | 69 | 2,264 | 68 | 2,401 |
+| Example Seller X | 11.2 | 87.55 | 981 | Partner | 69 | 1,521 | 46 | 1,636 |
+| Example Seller Y | 0.6 | 174.91 | 110 | Standard | 25 | 1,305 | 39 | 1,369 |
+| Example Seller N | 0.6 | 222.78 | 140 | Standard | 25 | 1,045 | 31 | 1,101 |
+| Example Seller R | 5.0 | 299.26 | 1,487 | Standard | 25 | 802 | 24 | 851 |
+| Example Seller E | 19.8 | 247.60 | 4,892 | Professional | 249 | 304 | 9 | 562 |
+| Example Seller AA | 0.6 | 143.09 | 86 | Standard | 25 | 461 | 14 | 500 |
+| Example Seller S | 13.3 | 67.72 | 902 | Standard | 25 | 351 | 11 | 386 |
+
+Top plays:
+
+| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
+|---|---|---|---|---|---|---|---|
+| 1 | Upgrade subscription | Example Seller AD | (whole account) | extra sales would pay for the next tier | 783 | Human (Seller Success) | 274 |
+| 2 | Retention / downgrade risk | Example Seller E | (whole account) | subscription is a high share of sales | 562 | Human (Seller Success) | 197 |
+| 3 | Upgrade subscription | Example Seller M | (whole account) | extra sales would pay for the next tier | 321 | Human (Seller Success) | 112 |
+| 4 | Retention / downgrade risk | Example Seller D | (whole account) | subscription is a high share of sales | 272 | Human (Seller Success) | 95 |
+| 5 | Upgrade subscription | Example Seller I | (whole account) | extra sales would pay for the next tier | 271 | Human (Seller Success) | 95 |
+| 6 | Boost adoption | Example Seller E | Example air purifier 08 | good listing, in season, Boost pays for itself | 262 | Human (Seller Success) | 92 |
+| 7 | Retention / downgrade risk | Example Seller A | (whole account) | subscription is a high share of sales | 251 | Human (Seller Success) | 88 |
+| 8 | Upgrade subscription | Example Seller Y | (whole account) | extra sales would pay for the next tier | 109 | Human (Seller Success) | 38 |
+| 9 | Upgrade subscription | Example Seller N | (whole account) | extra sales would pay for the next tier | 96 | Human (Seller Success) | 34 |
+| 10 | Upgrade subscription | Example Seller R | (whole account) | extra sales would pay for the next tier | 84 | Human (Seller Success) | 29 |
+
+48 plays in total: 14 calls, 34 automated. One row per seller: 16 sellers have a next best play.
+
+Top 10 products by estimated units:
+
+| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
+|---|---|---|---|---|---|---|---|
+| Example air purifier 05 | Example Seller M | 6 | In demand | yes | 37.9 | 38.41 | 1,455 |
+| Example air purifier 08 | Example Seller E | 6 | none | yes | 20.9 | 290.70 | 6,089 |
+| Example air purifier 11 | Example Seller S | 4 | none | yes | 13.3 | 67.72 | 902 |
+| Example air purifier 07 | Example Seller D | 2 | In demand | yes | 5.6 | 84.75 | 479 |
+| Example air purifier 20 | Example Seller X | 1 | In demand | yes | 4.3 | 189.07 | 811 |
+| Example air purifier 15 | Example Seller R | 2 | none | yes | 3.3 | 277.99 | 929 |
+| Example air purifier 02 | Example Seller A | 2 | In demand | yes | 3.0 | 178.31 | 535 |
+| Example air purifier 12 | Example Seller AD | 0 | In demand | yes | 3.0 | 168.04 | 504 |
+| Example air purifier 16 | Example Seller A | 0 | In demand | yes | 3.0 | 130.80 | 392 |
+| Example air purifier 13 | Example Seller F | 5 | In demand | yes | 3.0 | 119.23 | 358 |
+
+## Why call vs message?
+
+Should someone phone this seller, or is an automated message enough? A call costs about £120 of staff time and works about 35% of the time. A message costs about £2 and works about 15% of the time. A call works 20 percentage points more often but costs £118 more, so it only pays when enough money is at stake. Over 12 months that tipping point is £118 ÷ (12 × 20%) ≈ £49 a month. Above it: call. Below it: send the message.
+
+### The tipping point (break-even)
+
+A Seller Success call is worth it when the £ at stake a month is above (call cost − message cost) ÷ (12 months × (call success − message success)).
+
+At the defaults: (£120 − £2) ÷ (12 × (35% − 15%)) = £49.17 a month.
+
+Tipping point, £ a month, for other call costs and success gaps (message cost £2). Rows: cost of one call. Columns: how much more often a call works than a message, in percentage points.
+
+| Cost of one call | 10 points more often | 20 points more often | 30 points more often |
+|---|---|---|---|
+| £60 | £48.33 | £24.17 | £16.11 |
+| £120 | £98.33 | £49.17 | £32.78 |
+| £240 | £198.33 | £99.17 | £66.11 |
+
+How to read the grid: pick the row for what a call costs and the column for how much more often a call works; the cell is the £ a month at stake above which a call pays.
+
+Each play on a page gets one line in plain words, in the form "£X a month at stake, above the £Y tipping point, so call. Expected gain £Z a month." (or below it, so send the message).
+
+For example, the top play on the Heaters page: £514 a month at stake, above the £49 tipping point, so call. Expected gain £180 a month.
+
+## Method and formulas
+
+The rest of this document shows how the numbers above are worked out.
+
 ## What is real and what is assumed
 
 | Item | Source |
@@ -95,44 +394,6 @@ Play rules:
 
 Routing: Each play has a monthly £ at stake. A Seller Success call is assumed to work 35% of the time and cost £120; an automated message works 15% of the time and costs £2. Over 12 months, pick whichever leaves more money after its cost. With these settings a call is worth it when about £49 a month or more is at stake. Expected £ a month = £ at stake x the success rate of the chosen route.
 
-## Call or message?
-
-Should someone phone this seller, or is an automated message enough? A call costs about £120 of staff time and works about 35% of the time. A message costs about £2 and works about 15% of the time. A call works 20 percentage points more often but costs £118 more, so it only pays when enough money is at stake. Over 12 months that tipping point is £118 ÷ (12 × 20%) ≈ £49 a month. Above it: call. Below it: send the message.
-
-### The tipping point (break-even)
-
-A Seller Success call is worth it when the £ at stake a month is above (call cost − message cost) ÷ (12 months × (call success − message success)).
-
-At the defaults: (£120 − £2) ÷ (12 × (35% − 15%)) = £49.17 a month.
-
-Tipping point, £ a month, for other call costs and success gaps (message cost £2). Rows: cost of one call. Columns: how much more often a call works than a message, in percentage points.
-
-| Cost of one call | 10 points more often | 20 points more often | 30 points more often |
-|---|---|---|---|
-| £60 | £48.33 | £24.17 | £16.11 |
-| £120 | £98.33 | £49.17 | £32.78 |
-| £240 | £198.33 | £99.17 | £66.11 |
-
-How to read the grid: pick the row for what a call costs and the column for how much more often a call works; the cell is the £ a month at stake above which a call pays.
-
-Each play on a page gets one line in plain words, in the form "£X a month at stake, above the £Y tipping point, so call. Expected gain £Z a month." (or below it, so send the message).
-
-For example, the top play on the Heaters page: £514 a month at stake, above the £49 tipping point, so call. Expected gain £180 a month.
-
-## Seller Revenue: headline numbers on the example data
-
-Example data: method demo, not market estimates. Calibrated on a small sample of public OnBuy pages (Nov 2026); replace with internal data to use. Page defaults, November 2026. The sellers are synthetic, so these numbers show how the method behaves, not the size of any OnBuy category.
-
-| Category | Example products | Example sellers | Est. units/month (Nov) | Avg selling price per unit (£) | Est. GMV/month (£) | Commission/month (£) | Revenue to OnCommerce/month (£) | Plays | Top play |
-|---|---|---|---|---|---|---|---|---|---|
-| Heaters | 20 | 10 | 287 | 37.61 | 10,798 | 1,588 | 30,234 | 33 | Upgrade subscription, Example Seller A |
-| Fans | 20 | 23 | 125 | 60.50 | 7,562 | 1,126 | 43,484 | 35 | Upgrade subscription, Example Seller J |
-| Dehumidifiers | 20 | 13 | 233 | 74.33 | 17,301 | 2,563 | 79,461 | 47 | Upgrade subscription, Example Seller K |
-| Portable AC | 20 | 10 | 8 | 40.33 | 302 | 45 | 3,664 | 40 | Retention / downgrade risk, Example Seller D |
-| Air Purifiers | 20 | 18 | 117 | 118.65 | 13,933 | 2,021 | 29,433 | 48 | Upgrade subscription, Example Seller AD |
-
-Revenue to OnCommerce counts each seller's whole account (all categories), so it is larger than the category commission and does not add up across categories.
-
 ## Worked example 1: from reviews to units and GMV
 
 Heaters page, top-selling example listing: Example convector heater 07 (seller Example Seller G).
@@ -176,263 +437,6 @@ Top play on the Heaters page: Upgrade subscription for Example Seller A (why: ex
 | Automated message | £514.20 x 12 months x 15% success - £2 cost | £924 | Assumed (slider) |
 | Route | the larger of the two | Human (Seller Success) | Worked out |
 | Expected £ a month | £514.20 x 35% | £179.97 | Worked out |
-
-## Sample output for each category (example data, page defaults)
-
-### Heaters
-
-Subcategories: fan heaters, oil filled radiators, convector heaters. Season pattern: heating. Totals: 287 units x £37.61 average price = £10,798 GMV this month.
-
-Top 10 products by estimated units:
-
-| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
-|---|---|---|---|---|---|---|---|
-| Example convector heater 07 | Example Seller G | 7 | none | yes | 98.6 | 33.34 | 3,286 |
-| Example oil filled radiator 04 | Example Seller A | 3 | Hot | yes | 41.2 | 38.86 | 1,599 |
-| Example oil filled radiator 11 | Example Seller H | 2 | none | yes | 23.7 | 44.21 | 1,047 |
-| Example fan heater 20 | Example Seller I | 1 | Bestseller | yes | 17.5 | 28.64 | 501 |
-| Example fan heater 08 | Example Seller C | 1 | none | yes | 16.2 | 65.38 | 1,061 |
-| Example convector heater 15 | Example Seller D | 4 | Bestseller | yes | 15.9 | 31.33 | 499 |
-| Example convector heater 05 | Example Seller D | 3 | Bestseller | yes | 14.6 | 34.49 | 502 |
-| Example convector heater 02 | Example Seller F | 1 | Bestseller | yes | 11.7 | 50.07 | 584 |
-| Example oil filled radiator 17 | Example Seller B | 3 | Bestseller | yes | 10.0 | 44.02 | 440 |
-| Example fan heater 13 | Example Seller C | 0 | Bestseller | yes | 10.0 | 23.61 | 236 |
-
-Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
-
-| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
-|---|---|---|---|---|---|---|---|---|
-| Example Seller A | 45.2 | 39.00 | 1,761 | Partner | 69 | 8,355 | 418 | 8,842 |
-| Example Seller E | 9.6 | 41.61 | 398 | Partner | 69 | 4,768 | 238 | 5,076 |
-| Example Seller D | 33.5 | 34.01 | 1,139 | Partner | 69 | 3,573 | 179 | 3,821 |
-| Example Seller J | 23.7 | 41.74 | 990 | Partner | 69 | 2,990 | 149 | 3,208 |
-| Example Seller I | 17.5 | 28.64 | 501 | Partner | 69 | 2,958 | 148 | 3,175 |
-| Example Seller G | 78.8 | 31.22 | 2,462 | Partner | 69 | 2,363 | 118 | 2,550 |
-| Example Seller F | 11.7 | 50.07 | 584 | Standard | 25 | 875 | 44 | 944 |
-| Example Seller B | 10.0 | 44.02 | 440 | Standard | 25 | 875 | 44 | 944 |
-| Example Seller H | 24.2 | 44.08 | 1,066 | Standard | 25 | 800 | 40 | 865 |
-| Example Seller C | 33.0 | 44.21 | 1,457 | Standard | 25 | 747 | 37 | 810 |
-
-Top plays:
-
-| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
-|---|---|---|---|---|---|---|---|
-| 1 | Upgrade subscription | Example Seller A | (whole account) | extra sales would pay for the next tier | 514 | Human (Seller Success) | 180 |
-| 2 | Upgrade subscription | Example Seller E | (whole account) | extra sales would pay for the next tier | 371 | Human (Seller Success) | 130 |
-| 3 | Upgrade subscription | Example Seller D | (whole account) | extra sales would pay for the next tier | 323 | Human (Seller Success) | 113 |
-| 4 | Upgrade subscription | Example Seller J | (whole account) | extra sales would pay for the next tier | 300 | Human (Seller Success) | 105 |
-| 5 | Upgrade subscription | Example Seller I | (whole account) | extra sales would pay for the next tier | 298 | Human (Seller Success) | 104 |
-| 6 | Upgrade subscription | Example Seller G | (whole account) | extra sales would pay for the next tier | 274 | Human (Seller Success) | 96 |
-| 7 | Boost adoption | Example Seller G | Example convector heater 07 | good listing, in season, Boost pays for itself | 138 | Human (Seller Success) | 48 |
-| 8 | Upgrade subscription | Example Seller F | (whole account) | extra sales would pay for the next tier | 88 | Human (Seller Success) | 31 |
-| 9 | Upgrade subscription | Example Seller B | (whole account) | extra sales would pay for the next tier | 88 | Human (Seller Success) | 31 |
-| 10 | Upgrade subscription | Example Seller H | (whole account) | extra sales would pay for the next tier | 84 | Human (Seller Success) | 29 |
-
-33 plays in total: 13 calls, 20 automated. One row per seller: 10 sellers have a next best play.
-
-### Fans
-
-Subcategories: tower fans, pedestal fans, desk fans. Season pattern: cooling. Totals: 125 units x £60.50 average price = £7,562 GMV this month.
-
-Top 10 products by estimated units:
-
-| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
-|---|---|---|---|---|---|---|---|
-| Example tower fan 11 | Example Seller A | 11 | In demand | yes | 13.5 | 88.68 | 1,197 |
-| Example pedestal fan 07 | Example Seller H | 19 | In demand | yes | 11.9 | 62.42 | 741 |
-| Example pedestal fan 06 | Example Seller A | 10 | Bestseller | yes | 10.0 | 50.89 | 509 |
-| Example tower fan 04 | Example Seller A | 0 | Bestseller | yes | 10.0 | 47.22 | 472 |
-| Example pedestal fan 17 | Example Seller A | 9 | Bestseller | yes | 10.0 | 26.39 | 264 |
-| Example tower fan 15 | Example Seller A | 13 | In demand | yes | 8.1 | 98.70 | 802 |
-| Example desk fan 08 | Example Seller C | 17 | In demand | yes | 8.1 | 61.97 | 503 |
-| Example pedestal fan 16 | Example Seller X | 5 | none | yes | 7.6 | 46.80 | 356 |
-| Example tower fan 14 | Example Seller W | 5 | In demand | yes | 7.5 | 61.66 | 463 |
-| Example desk fan 19 | Example Seller O | 13 | In demand | yes | 6.2 | 41.11 | 253 |
-
-Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
-
-| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
-|---|---|---|---|---|---|---|---|---|
-| Example Seller J | 0.3 | 74.73 | 22 | Partner | 69 | 6,084 | 122 | 6,275 |
-| Example Seller M | 0.3 | 152.58 | 46 | Partner | 69 | 4,261 | 85 | 4,415 |
-| Example Seller A | 46.5 | 62.31 | 2,897 | Partner | 69 | 3,979 | 80 | 4,128 |
-| Example Seller C | 11.8 | 58.11 | 685 | Partner | 69 | 3,516 | 70 | 3,655 |
-| Example Seller X | 10.0 | 53.22 | 533 | Partner | 69 | 3,049 | 61 | 3,179 |
-| Example Seller T | 0.8 | 51.82 | 41 | Partner | 69 | 2,729 | 55 | 2,853 |
-| Example Seller Z | 1.1 | 48.92 | 53 | Partner | 69 | 2,213 | 44 | 2,327 |
-| Example Seller V | 3.0 | 28.90 | 87 | Partner | 69 | 1,896 | 38 | 2,003 |
-| Example Seller D | 4.7 | 44.63 | 212 | Partner | 69 | 1,750 | 35 | 1,854 |
-| Example Seller Y | 2.4 | 60.76 | 146 | Partner | 69 | 1,680 | 34 | 1,782 |
-
-Top plays:
-
-| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
-|---|---|---|---|---|---|---|---|
-| 1 | Upgrade subscription | Example Seller J | (whole account) | extra sales would pay for the next tier | 423 | Human (Seller Success) | 148 |
-| 2 | Upgrade subscription | Example Seller M | (whole account) | extra sales would pay for the next tier | 350 | Human (Seller Success) | 123 |
-| 3 | Upgrade subscription | Example Seller A | (whole account) | extra sales would pay for the next tier | 339 | Human (Seller Success) | 119 |
-| 4 | Upgrade subscription | Example Seller C | (whole account) | extra sales would pay for the next tier | 321 | Human (Seller Success) | 112 |
-| 5 | Upgrade subscription | Example Seller X | (whole account) | extra sales would pay for the next tier | 302 | Human (Seller Success) | 106 |
-| 6 | Upgrade subscription | Example Seller T | (whole account) | extra sales would pay for the next tier | 289 | Human (Seller Success) | 101 |
-| 7 | Upgrade subscription | Example Seller Z | (whole account) | extra sales would pay for the next tier | 268 | Human (Seller Success) | 94 |
-| 8 | Upgrade subscription | Example Seller N | (whole account) | extra sales would pay for the next tier | 113 | Human (Seller Success) | 40 |
-| 9 | Upgrade subscription | Example Seller O | (whole account) | extra sales would pay for the next tier | 106 | Human (Seller Success) | 37 |
-| 10 | Upgrade subscription | Example Seller H | (whole account) | extra sales would pay for the next tier | 105 | Human (Seller Success) | 37 |
-
-35 plays in total: 16 calls, 19 automated. One row per seller: 21 sellers have a next best play.
-
-### Dehumidifiers
-
-Subcategories: dehumidifiers. Season pattern: damp. Totals: 233 units x £74.33 average price = £17,301 GMV this month.
-
-Top 10 products by estimated units:
-
-| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
-|---|---|---|---|---|---|---|---|
-| Example dehumidifier 17 | Example Seller C | 28 | none | yes | 130.0 | 52.42 | 6,814 |
-| Example dehumidifier 07 | Example Seller A | 5 | In demand | yes | 17.4 | 85.22 | 1,486 |
-| Example dehumidifier 09 | Example Seller H | 5 | none | yes | 14.6 | 93.88 | 1,369 |
-| Example dehumidifier 12 | Example Seller B | 4 | In demand | yes | 11.0 | 93.90 | 1,031 |
-| Example dehumidifier 19 | Example Seller L | 1 | Bestseller | yes | 10.0 | 165.31 | 1,653 |
-| Example dehumidifier 15 | Example Seller T | 2 | Bestseller | yes | 10.0 | 75.31 | 753 |
-| Example dehumidifier 01 | Example Seller A | 3 | Hot | yes | 8.7 | 107.03 | 935 |
-| Example dehumidifier 14 | Example Seller B | 7 | In demand | yes | 5.7 | 70.47 | 399 |
-| Example dehumidifier 05 | Example Seller A | 0 | Hot | yes | 5.0 | 93.79 | 469 |
-| Example dehumidifier 11 | Example Seller B | 7 | In demand | yes | 4.5 | 84.90 | 381 |
-
-Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
-
-| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
-|---|---|---|---|---|---|---|---|---|
-| Example Seller K | 1.0 | 107.34 | 104 | Partner | 69 | 20,635 | 825 | 21,530 |
-| Example Seller D | 1.7 | 122.12 | 213 | Partner | 69 | 10,460 | 418 | 10,948 |
-| Example Seller H | 14.6 | 93.88 | 1,369 | Partner | 69 | 9,771 | 391 | 10,231 |
-| Example Seller C | 133.0 | 54.66 | 7,269 | Partner | 69 | 7,802 | 312 | 8,183 |
-| Example Seller N | 1.7 | 118.36 | 206 | Partner | 69 | 7,134 | 285 | 7,488 |
-| Example Seller A | 30.1 | 91.88 | 2,769 | Partner | 69 | 6,781 | 271 | 7,122 |
-| Example Seller Q | 0.1 | 174.92 | 17 | Partner | 69 | 4,508 | 180 | 4,757 |
-| Example Seller L | 10.9 | 161.18 | 1,756 | Partner | 69 | 2,692 | 108 | 2,868 |
-| Example Seller E | 3.0 | 182.58 | 548 | Partner | 69 | 2,244 | 90 | 2,403 |
-| Example Seller T | 12.3 | 70.88 | 870 | Partner | 69 | 1,969 | 79 | 2,116 |
-
-Top plays:
-
-| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
-|---|---|---|---|---|---|---|---|
-| 1 | Upgrade subscription | Example Seller K | (whole account) | extra sales would pay for the next tier | 1,005 | Human (Seller Success) | 352 |
-| 2 | Upgrade subscription | Example Seller D | (whole account) | extra sales would pay for the next tier | 598 | Human (Seller Success) | 209 |
-| 3 | Upgrade subscription | Example Seller H | (whole account) | extra sales would pay for the next tier | 571 | Human (Seller Success) | 200 |
-| 4 | Upgrade subscription | Example Seller C | (whole account) | extra sales would pay for the next tier | 492 | Human (Seller Success) | 172 |
-| 5 | Upgrade subscription | Example Seller N | (whole account) | extra sales would pay for the next tier | 465 | Human (Seller Success) | 163 |
-| 6 | Upgrade subscription | Example Seller A | (whole account) | extra sales would pay for the next tier | 451 | Human (Seller Success) | 158 |
-| 7 | Upgrade subscription | Example Seller Q | (whole account) | extra sales would pay for the next tier | 360 | Human (Seller Success) | 126 |
-| 8 | Boost adoption | Example Seller C | Example dehumidifier 17 | good listing, in season, Boost pays for itself | 307 | Human (Seller Success) | 107 |
-| 9 | Upgrade subscription | Example Seller L | (whole account) | extra sales would pay for the next tier | 288 | Human (Seller Success) | 101 |
-| 10 | Upgrade subscription | Example Seller E | (whole account) | extra sales would pay for the next tier | 270 | Human (Seller Success) | 94 |
-
-47 plays in total: 17 calls, 30 automated. One row per seller: 13 sellers have a next best play.
-
-### Portable AC
-
-Subcategories: air conditioners. Season pattern: cooling. Totals: 8 units x £40.33 average price = £302 GMV this month.
-
-Top 10 products by estimated units:
-
-| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
-|---|---|---|---|---|---|---|---|
-| Example air conditioner 14 | Example Seller K | 0 | none | yes | 0.5 | 100.33 | 50 |
-| Example air conditioner 15 | Example Seller I | 0 | none | yes | 0.5 | 95.20 | 48 |
-| Example air conditioner 18 | Example Seller B | 0 | none | yes | 0.5 | 58.46 | 29 |
-| Example air conditioner 16 | Example Seller D | 0 | none | yes | 0.5 | 45.77 | 23 |
-| Example air conditioner 06 | Example Seller D | 0 | none | yes | 0.5 | 44.67 | 22 |
-| Example air conditioner 04 | Example Seller B | 0 | none | yes | 0.5 | 40.69 | 20 |
-| Example air conditioner 11 | Example Seller E | 0 | none | yes | 0.5 | 38.39 | 19 |
-| Example air conditioner 09 | Example Seller L | 0 | none | yes | 0.5 | 29.76 | 15 |
-| Example air conditioner 17 | Example Seller A | 0 | none | yes | 0.5 | 28.47 | 14 |
-| Example air conditioner 13 | Example Seller D | 0 | none | yes | 0.5 | 23.64 | 12 |
-
-Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
-
-| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
-|---|---|---|---|---|---|---|---|---|
-| Example Seller K | 0.4 | 95.20 | 38 | Standard | 25 | 794 | 16 | 834 |
-| Example Seller D | 1.5 | 38.03 | 57 | Professional | 249 | 556 | 11 | 816 |
-| Example Seller A | 1.9 | 21.52 | 41 | Professional | 249 | 443 | 9 | 701 |
-| Example Seller C | 0.0 | 824.35 | 0 | Standard | 25 | 410 | 8 | 443 |
-| Example Seller B | 1.6 | 45.79 | 73 | Standard | 25 | 196 | 4 | 225 |
-| Example Seller G | 0.0 | 412.22 | 0 | Standard | 25 | 141 | 3 | 169 |
-| Example Seller E | 0.5 | 38.39 | 19 | Standard | 25 | 106 | 2 | 133 |
-| Example Seller J | 0.5 | 19.61 | 10 | Standard | 25 | 104 | 2 | 131 |
-| Example Seller L | 0.6 | 27.65 | 17 | Standard | 25 | 95 | 2 | 122 |
-| Example Seller I | 0.5 | 95.20 | 48 | Standard | 25 | 64 | 1 | 90 |
-
-Top plays:
-
-| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
-|---|---|---|---|---|---|---|---|
-| 1 | Retention / downgrade risk | Example Seller D | (whole account) | subscription is a high share of sales | 816 | Human (Seller Success) | 286 |
-| 2 | Retention / downgrade risk | Example Seller A | (whole account) | subscription is a high share of sales | 701 | Human (Seller Success) | 245 |
-| 3 | Retention / downgrade risk | Example Seller I | (whole account) | subscription is a high share of sales | 90 | Human (Seller Success) | 32 |
-| 4 | Upgrade subscription | Example Seller K | (whole account) | extra sales would pay for the next tier | 84 | Human (Seller Success) | 29 |
-| 5 | Upgrade subscription | Example Seller C | (whole account) | extra sales would pay for the next tier | 64 | Human (Seller Success) | 23 |
-| 6 | Listing fix to unlock sales | Example Seller K | Example air conditioner 14 | no reviews yet | 22 | Automated journey | 3 |
-| 7 | Listing fix to unlock sales | Example Seller I | Example air conditioner 15 | no reviews yet | 22 | Automated journey | 3 |
-| 8 | Listing fix to unlock sales | Example Seller B | Example air conditioner 18 | no reviews yet | 14 | Automated journey | 2 |
-| 9 | Listing fix to unlock sales | Example Seller D | Example air conditioner 16 | no reviews yet | 11 | Automated journey | 2 |
-| 10 | Listing fix to unlock sales | Example Seller D | Example air conditioner 06 | no reviews yet | 10 | Automated journey | 2 |
-
-40 plays in total: 5 calls, 35 automated. One row per seller: 10 sellers have a next best play.
-
-### Air Purifiers
-
-Subcategories: air purifiers. Season pattern: all-year. Totals: 117 units x £118.65 average price = £13,933 GMV this month.
-
-Top 10 products by estimated units:
-
-| Product | Seller | Reviews | Badge | In stock | Est. units/month | Avg selling price per unit (£) | Est. GMV/month (£) |
-|---|---|---|---|---|---|---|---|
-| Example air purifier 05 | Example Seller M | 6 | In demand | yes | 37.9 | 38.41 | 1,455 |
-| Example air purifier 08 | Example Seller E | 6 | none | yes | 20.9 | 290.70 | 6,089 |
-| Example air purifier 11 | Example Seller S | 4 | none | yes | 13.3 | 67.72 | 902 |
-| Example air purifier 07 | Example Seller D | 2 | In demand | yes | 5.6 | 84.75 | 479 |
-| Example air purifier 20 | Example Seller X | 1 | In demand | yes | 4.3 | 189.07 | 811 |
-| Example air purifier 15 | Example Seller R | 2 | none | yes | 3.3 | 277.99 | 929 |
-| Example air purifier 02 | Example Seller A | 2 | In demand | yes | 3.0 | 178.31 | 535 |
-| Example air purifier 12 | Example Seller AD | 0 | In demand | yes | 3.0 | 168.04 | 504 |
-| Example air purifier 16 | Example Seller A | 0 | In demand | yes | 3.0 | 130.80 | 392 |
-| Example air purifier 13 | Example Seller F | 5 | In demand | yes | 3.0 | 119.23 | 358 |
-
-Seller revenue breakdown (top 10 by revenue to OnCommerce; category columns first, then the whole account):
-
-| Seller | Est. units/month here | Avg selling price per unit (£) | Est. GMV/month here (£) | Tier | Subscription (£) | + Commission (£) | + Boost (£) | = Revenue/month (£) |
-|---|---|---|---|---|---|---|---|---|
-| Example Seller AD | 3.1 | 165.11 | 512 | Partner | 69 | 15,078 | 452 | 15,600 |
-| Example Seller M | 30.5 | 37.62 | 1,149 | Partner | 69 | 3,532 | 106 | 3,706 |
-| Example Seller I | 1.5 | 120.94 | 185 | Partner | 69 | 2,264 | 68 | 2,401 |
-| Example Seller X | 11.2 | 87.55 | 981 | Partner | 69 | 1,521 | 46 | 1,636 |
-| Example Seller Y | 0.6 | 174.91 | 110 | Standard | 25 | 1,305 | 39 | 1,369 |
-| Example Seller N | 0.6 | 222.78 | 140 | Standard | 25 | 1,045 | 31 | 1,101 |
-| Example Seller R | 5.0 | 299.26 | 1,487 | Standard | 25 | 802 | 24 | 851 |
-| Example Seller E | 19.8 | 247.60 | 4,892 | Professional | 249 | 304 | 9 | 562 |
-| Example Seller AA | 0.6 | 143.09 | 86 | Standard | 25 | 461 | 14 | 500 |
-| Example Seller S | 13.3 | 67.72 | 902 | Standard | 25 | 351 | 11 | 386 |
-
-Top plays:
-
-| Rank | Play | Seller | Product | Why | £ at stake/month | Route | Expected £/month |
-|---|---|---|---|---|---|---|---|
-| 1 | Upgrade subscription | Example Seller AD | (whole account) | extra sales would pay for the next tier | 783 | Human (Seller Success) | 274 |
-| 2 | Retention / downgrade risk | Example Seller E | (whole account) | subscription is a high share of sales | 562 | Human (Seller Success) | 197 |
-| 3 | Upgrade subscription | Example Seller M | (whole account) | extra sales would pay for the next tier | 321 | Human (Seller Success) | 112 |
-| 4 | Retention / downgrade risk | Example Seller D | (whole account) | subscription is a high share of sales | 272 | Human (Seller Success) | 95 |
-| 5 | Upgrade subscription | Example Seller I | (whole account) | extra sales would pay for the next tier | 271 | Human (Seller Success) | 95 |
-| 6 | Boost adoption | Example Seller E | Example air purifier 08 | good listing, in season, Boost pays for itself | 262 | Human (Seller Success) | 92 |
-| 7 | Retention / downgrade risk | Example Seller A | (whole account) | subscription is a high share of sales | 251 | Human (Seller Success) | 88 |
-| 8 | Upgrade subscription | Example Seller Y | (whole account) | extra sales would pay for the next tier | 109 | Human (Seller Success) | 38 |
-| 9 | Upgrade subscription | Example Seller N | (whole account) | extra sales would pay for the next tier | 96 | Human (Seller Success) | 34 |
-| 10 | Upgrade subscription | Example Seller R | (whole account) | extra sales would pay for the next tier | 84 | Human (Seller Success) | 29 |
-
-48 plays in total: 14 calls, 34 automated. One row per seller: 16 sellers have a next best play.
 
 ## Limits
 

@@ -126,7 +126,7 @@ def seller_revenue_section() -> list[str]:
                 + (f"{gbp(u['avg_price'], 2)}" if u["est_units_month"] else "n/a")
                 + f" average price = {gbp(u['est_gmv_month'])} GMV this month.", ""]
         tp = p.sort_values(["est_units_month", "est_gmv_month"], ascending=False).head(10)
-        out += ["Top 10 products by estimated units:", "", md_table(pd.DataFrame({
+        prod_lines = ["Top 10 products by estimated units:", "", md_table(pd.DataFrame({
             "Product": tp["title"], "Seller": tp["seller"], "Reviews": tp["product_review_count"],
             "Badge": tp["badge"].fillna("").replace("", "none"),
             "In stock": (~tp["flag_out_of_stock"]).map({True: "yes", False: "no"}),
@@ -153,6 +153,7 @@ def seller_revenue_section() -> list[str]:
             out += [f"{len(pl)} plays in total: {rc.get('Human (Seller Success)', 0)} calls, "
                     f"{rc.get('Automated journey', 0)} automated. One row per seller: "
                     f"{len(top_play_per_seller(pl))} sellers have a next best play.", ""]
+        out += prod_lines     # sellers and plays first, then products, as on the page
     return out
 
 
@@ -160,7 +161,7 @@ def break_even_section(a: Settings, example_play: dict | None = None) -> list[st
     be = break_even_stake(a)
     grid = break_even_grid(a).map(lambda v: gbp(v, 2) if v != float("inf") else "never")
     grid = grid.rename(columns=lambda c: f"{c} more often").reset_index()
-    out = ["## Call or message?", "",
+    out = ["## Why call vs message?", "",
            call_or_message_text(a), "",
            "### The tipping point (break-even)", "",
            "A Seller Success call is worth it when the £ at stake a month is above "
@@ -285,8 +286,13 @@ def build() -> str:
     L += ["", "Routing: " + routing_rule(a), ""]
     hp = run_category(pd.read_csv(ROOT / "seller_growth" / "example_products.csv"),
                       CATEGORIES["heaters"].subcategories, a)[2]
-    L += break_even_section(a, hp.iloc[0].to_dict() if len(hp) else None)
-    L += seller_revenue_section()
+    sr = seller_revenue_section()
+    w1 = sr.index("## Worked example 1: from reviews to units and GMV")
+    s0 = sr.index("## Sample output for each category (example data, page defaults)")
+    cut = L.index("## What is real and what is assumed")
+    # same order as the pages: results, sellers and plays first; why call vs message next; method after
+    L = (L[:cut] + sr[:w1] + sr[s0:] + break_even_section(a, hp.iloc[0].to_dict() if len(hp) else None)
+         + ["## Method and formulas", "", "The rest of this document shows how the numbers above are worked out.", ""] + L[cut:] + sr[w1:s0])
     L += ["## Limits", "",
           "- The OnBuy data is synthetic. It copies the shape of a small sample found through search, which favours "
           "listings that rank well. It says nothing about any real seller.",

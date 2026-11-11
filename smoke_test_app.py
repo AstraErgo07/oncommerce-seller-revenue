@@ -39,6 +39,7 @@ try:
             continue
         assert any(BANNER in w.value for w in at.warning), page
         assert any(b.label == "Download decision log" for b in at.get("download_button")), page
+        assert any(e.label == "Why call vs message?" for e in at.expander), page
         assert any(m.value.startswith("Should someone phone this seller") and "≈ £49 a month" in m.value
                    for m in at.markdown), page
         assert any("Cost of one call" in list(d.value.columns) for d in at.dataframe), page
@@ -53,10 +54,11 @@ try:
                 for i, c in enumerate(cs):
                     if UNITS in c:
                         assert PRICE in cs[i + 1] and GMV in cs[i + 2], (page, cs)
-            # method, formulas and break-even come before the results tables
+            # results, sellers and plays first; method afterwards
             heads = [s.value for s in at.subheader]
-            assert heads.index("Method and formulas") < heads.index("Results") < \
-                heads.index("1. Products: est. units, average price and GMV per month"), heads
+            order = ["Results", "1. Revenue per seller (to OnCommerce, per month)", "2. Plays, ranked by expected £/month",
+                     "3. Products: est. units, average price and GMV per month", "Method and formulas"]
+            assert [heads.index(h) for h in order] == sorted(heads.index(h) for h in order), heads
             assert any(e.label == "How these numbers are worked out" for e in at.expander), page
             assert any("sold to date" in str(t.value.to_dict()) for t in at.table), page
             # every assumption control carries a tag

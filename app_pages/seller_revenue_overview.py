@@ -8,7 +8,7 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from seller_growth.categories import CATEGORIES, ORDER, SECTION  # noqa: E402
-from app_pages.shared import banner, break_even_panel, data_sidebar, decision_log_section, guarded  # noqa: E402
+from app_pages.shared import banner, why_call_vs_message, data_sidebar, decision_log_section, guarded  # noqa: E402
 from seller_growth.revenue import Settings, run_category, units_summary  # noqa: E402
 
 st.title(SECTION)
@@ -17,7 +17,6 @@ st.markdown("One page per category, each for its own category manager, with its 
             "default assumptions; change them on each category page.")
 df, is_example, source = guarded(data_sidebar)
 banner(is_example, source)
-break_even_panel(Settings())
 rows = []
 for k in ORDER:
     cfg = CATEGORIES[k]
@@ -36,4 +35,5 @@ st.caption("Revenue to OnCommerce counts each seller's whole account; a seller o
            "both, so the column does not add up across categories. Units and GMV are this category only; GMV = units × "
            "average selling price per unit. Each category page has 'How these numbers are worked out' with the "
            "steps in plain words.")
+why_call_vs_message(Settings())
 decision_log_section(None)

@@ -192,9 +192,14 @@ def settings_sidebar(cfg: CategoryConfig, df_all: pd.DataFrame) -> Settings:
 
 
 # --- break-even ----------------------------------------------------------------------------------------------------
+def why_call_vs_message(a: Settings) -> None:
+    """Collapsed expander after the plays table: the plain explanation first, then the tipping point and grid."""
+    with st.expander("Why call vs message?", expanded=False):
+        break_even_panel(a)
+
+
 def break_even_panel(a: Settings) -> None:
     be = break_even_stake(a)
-    st.markdown("#### Call or message?")
     st.markdown(call_or_message_text(a))
     with st.container(border=True):
         st.markdown("##### The tipping point (break-even)")
