@@ -1,0 +1,355 @@
+{
+ "source": "small sample of public OnBuy product pages viewed in November 2026 (not included)",
+ "snapshot": "2026-11-11",
+ "categories": {
+  "heaters": {
+   "n_products": 14,
+   "n_sellers": 9,
+   "subcategory_mix": {
+    "fan heaters": 0.429,
+    "oil filled radiators": 0.357,
+    "convector heaters": 0.214
+   },
+   "price": {
+    "n": 14,
+    "log_mean": 3.634,
+    "log_sd": 0.543,
+    "min": 11.85,
+    "median": 43.99,
+    "max": 109.0
+   },
+   "paid_delivery_share": 0.071,
+   "paid_delivery_fee_median": 3.99,
+   "reviews_zero_share": 0.286,
+   "reviews_nonzero": {
+    "n": 10,
+    "log_mean": 0.965,
+    "log_sd": 1.029,
+    "min": 1.0,
+    "median": 2.0,
+    "max": 18.0
+   },
+   "latest_review_age_months_median": 8.9,
+   "latest_review_stale_share": 0.3,
+   "first_review_known_share": 1.0,
+   "badge_mix": {
+    "Bestseller": 0.357,
+    "none": 0.357,
+    "In demand": 0.214,
+    "Hot": 0.071
+   },
+   "offers_count_mix": {
+    "0": 0.214,
+    "1": 0.714,
+    "2": 0.071
+   },
+   "other_offer_price_ratio": {
+    "median": 1.339,
+    "max": 1.339
+   },
+   "out_of_stock_share": 0.214,
+   "price_anomaly_share": 0.0,
+   "duplicate_page_share": 0.071,
+   "overseas_dispatch_share": 0.071,
+   "thin_content_share": 0.071,
+   "no_brand_share": 0.071,
+   "former_seller_reviews_share": 0.071,
+   "delivery_max_days_median": 5.0,
+   "seller_orders_shown_share": 0.3,
+   "seller_orders_k": {
+    "n": 3,
+    "log_mean": 3.013,
+    "log_sd": 0.872,
+    "min": 6.5,
+    "median": 24.0,
+    "max": 54.0
+   },
+   "seller_reviews": {
+    "n": 7,
+    "log_mean": 6.84,
+    "log_sd": 0.884,
+    "min": 305.0,
+    "median": 667.0,
+    "max": 4400.0
+   },
+   "professional_share": 0.0,
+   "reviews_per_order_median": 0.0708
+  },
+  "fans": {
+   "n_products": 8,
+   "n_sellers": 22,
+   "subcategory_mix": {
+    "tower fans": 0.5,
+    "pedestal fans": 0.375,
+    "desk fans": 0.125
+   },
+   "price": {
+    "n": 8,
+    "log_mean": 4.023,
+    "log_sd": 0.409,
+    "min": 32.99,
+    "median": 49.36,
+    "max": 128.99
+   },
+   "paid_delivery_share": 0.0,
+   "paid_delivery_fee_median": 0.0,
+   "reviews_zero_share": 0.25,
+   "reviews_nonzero": {
+    "n": 6,
+    "log_mean": 2.223,
+    "log_sd": 0.679,
+    "min": 4.0,
+    "median": 9.0,
+    "max": 31.0
+   },
+   "latest_review_age_months_median": 3.2,
+   "latest_review_stale_share": 0.167,
+   "first_review_known_share": 0.833,
+   "badge_mix": {
+    "In demand": 0.75,
+    "Bestseller": 0.125,
+    "none": 0.125
+   },
+   "offers_count_mix": {
+    "1": 0.375,
+    "2": 0.125,
+    "3": 0.125,
+    "4": 0.375
+   },
+   "other_offer_price_ratio": {
+    "median": 1.058,
+    "max": 3.928
+   },
+   "out_of_stock_share": 0.0,
+   "price_anomaly_share": 0.0,
+   "duplicate_page_share": 0.0,
+   "overseas_dispatch_share": 0.0,
+   "thin_content_share": 0.25,
+   "no_brand_share": 0.125,
+   "former_seller_reviews_share": 0.375,
+   "delivery_max_days_median": 6.5,
+   "seller_orders_shown_share": 0.333,
+   "seller_orders_k": {
+    "n": 2,
+    "log_mean": 2.649,
+    "log_sd": 0.347,
+    "min": 10.0,
+    "median": 15.0,
+    "max": 20.0
+   },
+   "seller_reviews": {
+    "n": 6,
+    "log_mean": 6.197,
+    "log_sd": 1.337,
+    "min": 52.0,
+    "median": 881.5,
+    "max": 2300.0
+   },
+   "professional_share": 0.0,
+   "reviews_per_order_median": 0.0632
+  },
+  "dehumidifiers": {
+   "n_products": 9,
+   "n_sellers": 11,
+   "subcategory_mix": {
+    "dehumidifiers": 1.0
+   },
+   "price": {
+    "n": 9,
+    "log_mean": 4.67,
+    "log_sd": 0.673,
+    "min": 31.8,
+    "median": 126.32,
+    "max": 393.36
+   },
+   "paid_delivery_share": 0.222,
+   "paid_delivery_fee_median": 6.6,
+   "reviews_zero_share": 0.333,
+   "reviews_nonzero": {
+    "n": 6,
+    "log_mean": 1.658,
+    "log_sd": 1.266,
+    "min": 1.0,
+    "median": 6.5,
+    "max": 34.0
+   },
+   "latest_review_age_months_median": 16.5,
+   "latest_review_stale_share": 0.5,
+   "first_review_known_share": 0.833,
+   "badge_mix": {
+    "none": 0.444,
+    "In demand": 0.333,
+    "Hot": 0.111,
+    "Bestseller": 0.111
+   },
+   "offers_count_mix": {
+    "1": 0.778,
+    "2": 0.111,
+    "3": 0.111
+   },
+   "other_offer_price_ratio": {
+    "median": 1.55,
+    "max": 1.597
+   },
+   "out_of_stock_share": 0.0,
+   "price_anomaly_share": 0.0,
+   "duplicate_page_share": 0.0,
+   "overseas_dispatch_share": 0.0,
+   "thin_content_share": 0.111,
+   "no_brand_share": 0.0,
+   "former_seller_reviews_share": 0.0,
+   "delivery_max_days_median": 7.0,
+   "seller_orders_shown_share": 0.625,
+   "seller_orders_k": {
+    "n": 5,
+    "log_mean": 3.495,
+    "log_sd": 1.263,
+    "min": 5.5,
+    "median": 54.0,
+    "max": 118.0
+   },
+   "seller_reviews": {
+    "n": 8,
+    "log_mean": 6.868,
+    "log_sd": 1.659,
+    "min": 66.0,
+    "median": 797.5,
+    "max": 9100.0
+   },
+   "professional_share": 0.0,
+   "reviews_per_order_median": 0.0763
+  },
+  "portable_ac": {
+   "n_products": 8,
+   "n_sellers": 9,
+   "subcategory_mix": {
+    "air conditioners": 1.0
+   },
+   "price": {
+    "n": 6,
+    "log_mean": 3.522,
+    "log_sd": 0.606,
+    "min": 13.85,
+    "median": 38.76,
+    "max": 76.0
+   },
+   "paid_delivery_share": 0.25,
+   "paid_delivery_fee_median": 4.0,
+   "reviews_zero_share": 1.0,
+   "reviews_nonzero": {
+    "n": 0
+   },
+   "latest_review_age_months_median": null,
+   "latest_review_stale_share": 0.0,
+   "first_review_known_share": 0.0,
+   "badge_mix": {
+    "none": 1.0
+   },
+   "offers_count_mix": {
+    "1": 0.875,
+    "2": 0.125
+   },
+   "other_offer_price_ratio": {
+    "median": 1.325,
+    "max": 1.325
+   },
+   "out_of_stock_share": 0.0,
+   "price_anomaly_share": 0.25,
+   "duplicate_page_share": 0.0,
+   "overseas_dispatch_share": 0.75,
+   "thin_content_share": 0.375,
+   "no_brand_share": 0.5,
+   "former_seller_reviews_share": 0.0,
+   "delivery_max_days_median": 14.0,
+   "seller_orders_shown_share": 0.125,
+   "seller_orders_k": {
+    "n": 1,
+    "log_mean": -0.627,
+    "log_sd": 0.3,
+    "min": 0.53,
+    "median": 0.53,
+    "max": 0.53
+   },
+   "seller_reviews": {
+    "n": 7,
+    "log_mean": 4.805,
+    "log_sd": 0.863,
+    "min": 35.0,
+    "median": 102.0,
+    "max": 416.0
+   },
+   "professional_share": 0.125,
+   "reviews_per_order_median": 0.0655
+  },
+  "air_purifiers": {
+   "n_products": 8,
+   "n_sellers": 18,
+   "subcategory_mix": {
+    "air purifiers": 1.0
+   },
+   "price": {
+    "n": 8,
+    "log_mean": 4.497,
+    "log_sd": 0.667,
+    "min": 26.95,
+    "median": 75.96,
+    "max": 231.44
+   },
+   "paid_delivery_share": 0.0,
+   "paid_delivery_fee_median": 0.0,
+   "reviews_zero_share": 0.625,
+   "reviews_nonzero": {
+    "n": 3,
+    "log_mean": 0.768,
+    "log_sd": 0.659,
+    "min": 1.0,
+    "median": 2.0,
+    "max": 5.0
+   },
+   "latest_review_age_months_median": 8.6,
+   "latest_review_stale_share": 0.333,
+   "first_review_known_share": 1.0,
+   "badge_mix": {
+    "In demand": 0.625,
+    "none": 0.375
+   },
+   "offers_count_mix": {
+    "1": 0.375,
+    "2": 0.25,
+    "3": 0.125,
+    "4": 0.25
+   },
+   "other_offer_price_ratio": {
+    "median": 1.157,
+    "max": 1.493
+   },
+   "out_of_stock_share": 0.0,
+   "price_anomaly_share": 0.0,
+   "duplicate_page_share": 0.125,
+   "overseas_dispatch_share": 0.0,
+   "thin_content_share": 0.125,
+   "no_brand_share": 0.0,
+   "former_seller_reviews_share": 0.25,
+   "delivery_max_days_median": 5.0,
+   "seller_orders_shown_share": 0.25,
+   "seller_orders_k": {
+    "n": 2,
+    "log_mean": 1.522,
+    "log_sd": 0.269,
+    "min": 3.5,
+    "median": 4.75,
+    "max": 6.0
+   },
+   "seller_reviews": {
+    "n": 7,
+    "log_mean": 4.758,
+    "log_sd": 2.299,
+    "min": 2.0,
+    "median": 221.0,
+    "max": 5700.0
+   },
+   "professional_share": 0.125,
+   "reviews_per_order_median": 0.0632
+  }
+ }
+}

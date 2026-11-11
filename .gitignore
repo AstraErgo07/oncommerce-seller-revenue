@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.streamlit/secrets.toml
+.env
+# local decision logs (download the CSV from the app instead)
+seller_growth/decisions*.csv
+# private calibration inputs are never committed
+data/private/
+*.pdf

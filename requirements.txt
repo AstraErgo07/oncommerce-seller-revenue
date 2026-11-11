@@ -1,0 +1,3 @@
+# Python 3.12 or newer (pandas 3 needs 3.11+). On Streamlit Cloud choose the Python version under Advanced settings.
+streamlit==1.67.0
+pandas==3.1.1
